@@ -1,4 +1,12 @@
 {
+  "name": "book-illustrator",
+  "private": true,
+  "packageManager": "bun",
+  "scripts": {
+    "dev": "concurrently \"bun run backend\" \"bun run frontend\"",
+    "backend": "cd backend && bun run dev",
+    "frontend": "cd frontend && bun run dev"
+  },
   "dependencies": {
     "cors": "^2.8.6",
     "express": "^5.2.1",
