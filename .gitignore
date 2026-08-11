@@ -1,0 +1,43 @@
+# Env / secrets
+.env
+.env.local
+*.env
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Bun
+bun.lockb
+
+# Build output
+dist/
+build/
+frontend/dist/
+backend/dist/
+
+# SQLite DB + generated/uploaded files (runtime data, not source)
+backend/data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Test output
+coverage/
+.vitest-cache/
+
+# Logs
+*.log
+npm-debug.log*
+bun-debug.log*
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# TypeScript build info
+*.tsbuildinfo
