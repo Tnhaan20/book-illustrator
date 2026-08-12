@@ -8,7 +8,7 @@
 **Status:** decided
 
 ### Reasoning
-I wanted a single tool that handles runtime, package manager, and SQLite without extra native dependencies. Bun ships `bun:sqlite` as a built-in API, which removes the need for `better-sqlite3` — a native C++ binding that requires build tools and a matching Node.js ABI. That alone solved my biggest setup pain point, and the speed gain on installs was a bonus I was happy to take.
+Wanted one tool for runtime, package manager, and SQLite, without extra native dependencies. Bun's built-in `bun:sqlite` removes the need for `better-sqlite3` — a native C++ binding requiring build tools and a matching Node ABI. That alone solved my main setup pain point; faster installs were a bonus.
 
 ### Upsides
 - `bun:sqlite` is built-in — zero extra packages, no native build step
@@ -32,7 +32,7 @@ I wanted a single tool that handles runtime, package manager, and SQLite without
 **Status:** decided
 
 ### Reasoning
-The hardest requirement in this assessment is atomic step-locking — checking a step's state and flipping it to "running" without a second request slipping in between (§4.3, no duplicate Gemini calls). JSON files can do this, but only with hand-rolled file locking (write-to-temp + atomic rename) — more code, more ways to get it subtly wrong. SQLite's `db.transaction()` gives this atomicity natively, still as a single embedded file with no server process, so it doesn't cost anything JSON would have kept for free.
+The hardest requirement (§4.3) is atomic step-locking — check a step's state and flip it to `'running'` without a second request slipping in between. JSON needs hand-rolled file locking to do this safely; SQLite's `db.transaction()` gives it natively, still as a single embedded file with no server process.
 
 ### Upsides
 - Atomic transactions solve the concurrency requirement correctly, out of the box
@@ -54,21 +54,10 @@ The hardest requirement in this assessment is atomic step-locking — checking a
 **Status:** decided
 
 ### Reasoning
-Each of the five pipeline steps (style, characters, portraits, chapters, illustrations)
-must be independently trackable so that:
-
-1. A duplicate HTTP request can be detected and short-circuited before touching Gemini.
-2. A failed step can be retried without re-running steps that already succeeded.
-3. The frontend stepper can render exactly which step is running/done/failed without
-   guessing from the overall project status.
-
-Storing the status inside the DB row — rather than in memory or a JSON file — means
-the state survives a server restart and is visible to any query.
+Each of the five steps needs independently trackable, persisted state so that: a duplicate request can be short-circuited before touching Gemini, a failed step can be retried without redoing finished ones, and the frontend stepper can render exact progress without guessing from overall project status. Storing this in the DB — not memory or a JSON file — survives a server restart and stays queryable.
 
 ### Implementation
-`pipeline_state` has five `TEXT` columns (`step_style`, `step_characters`,
-`step_portraits`, `step_chapters`, `step_illustrations`), each constrained to
-`'pending' | 'running' | 'done' | 'failed'` via a SQLite `CHECK` constraint.
+`pipeline_state` has five `TEXT` columns (`step_style`, `step_characters`, `step_portraits`, `step_chapters`, `step_illustrations`), each constrained to `'pending' | 'running' | 'done' | 'failed'` via a SQLite `CHECK` constraint.
 
 **Concurrency rule (applied to every step endpoint):**
 > In one SQLite transaction: check `step_x == 'pending'` → set to `'running'` → commit.
@@ -79,8 +68,7 @@ This single pattern satisfies all three requirements above atomically.
 
 ### Upsides
 - Gemini is never called twice for the same step, even if two requests arrive simultaneously
-- A server crash mid-step leaves the row as `'running'`; the retry endpoint detects
-  a stale `step_started_at` and resets it to `'pending'`
+- A server crash mid-step leaves the row as `'running'`; the retry endpoint detects a stale `step_started_at` and resets it to `'pending'`
 - SQLite CHECK constraints enforce valid values at the DB level, independent of TypeScript
 
 ### Cons accepted
@@ -95,27 +83,23 @@ This single pattern satisfies all three requirements above atomically.
 **Status:** decided (AI override)
 
 ### What happened
-
-§4.2 requires the book to reach the app two ways — pasted text or an uploaded .txt file — and both must work identically from that point on. Antigravity's first implementation of runStyleStep() called ai.files.upload() unconditionally, treating the book as if it always arrived as a real file handle. I only noticed because I tested the paste-text path specifically: pasted text is already an in-memory string, not something the Files API can upload, and the call failed immediately. Tracing it back, POST /projects only ever built a file reference for the multer-upload branch and never normalized the paste-text branch to match before either reached the style step — so the bug was invisible if you only ever tested by uploading files, which is what Antigravity's own test had done.
+§4.2 requires the book to arrive two ways — pasted text or an uploaded `.txt` file — and both must behave identically afterward. Antigravity's first `runStyleStep()` called `ai.files.upload()` unconditionally, assuming a real file handle always existed. Testing the paste-text path broke this immediately — pasted text is just a string, not something the Files API can upload. `POST /projects` only built a file reference for the upload branch, never the paste branch, so the bug stayed invisible as long as testing only used file uploads.
 
 ### Fix
-
-Made POST /projects converge both input methods to the same representation before returning: regardless of paste or upload, the content is written to backend/data/{userId}/{projectId}/book.txt. The style step reads that file back as a plain string via readBookText() and sends it inline in the Interactions API prompt — no Files API call anywhere in the text chain anymore, so there's no second code path to drift out of sync again.
+`POST /projects` now writes the book content to `backend/data/{userId}/{projectId}/book.txt` regardless of input method. The style step reads that file back as plain text and sends it inline in the prompt — no Files API call in the text chain, so there's no second path to drift out of sync.
 
 ### Cost accepted
-
 Loses the Files API's token-caching benefit for very long books — inline text costs more tokens per call. Acceptable at this project's scale (short fiction texts, local use); would reconsider with a size threshold (e.g. re-introduce Files API upload above ~50,000 chars) if this became a real product.
-
 
 ---
 
-## D-005 · Botanical Field Notebook "Stitch" UI and Palette
+## D-005 · Botanical Field Notebook "Google Stitch" UI and Palette
 
 **Date:** 2026-08-12  
 **Status:** decided
 
 ### Problem
-The frontend UI needs to evoke a specific visual concept: a naturalist's botanical field notebook, blending scientific precision, archival aesthetics, and physical textures. It needs a structured palette, typography rules, clear component states (buttons, input fields), and customizable stepper views (with or without a sidebar).
+The frontend needed a distinct visual concept — a naturalist's field notebook, blending scientific precision with archival texture — plus a defined palette, typography, component states, and two stepper layouts (with/without sidebar).
 
 ### Decision
 Standardize on the **Botanical Field Notebook** specification outlined in `frontend/Design.md`.
@@ -140,13 +124,13 @@ Standardize on the **Botanical Field Notebook** specification outlined in `front
 
 ---
 
-## D-006 · Project Ingestion Bounds
+## D-006 · Caught Project Ingestion Bounds
 
 **Date:** 2026-08-12  
-**Status:** decided
+**Status:** decided (AI override)
 
 ### Problem
-In the initial frontend draft, the Project Creation form (`NewProject`) had an optional input field for style preference. Submitting this field sent the `art_style` parameter to `POST /projects`. However, style generation is a distinct pipeline step (`step_style`) with its own endpoint `/projects/:id/steps/style` which accepts a `{ style }` parameter. Collecting style inputs during the project setup created duplication of parameters and potential mismatch during the validation phase.
+The initial `NewProject` form had an optional style field that posted `art_style` to `POST /projects`. But style generation is its own pipeline step (`/projects/:id/steps/style`, which already accepts `{ style }`) — collecting it at creation time duplicated the parameter and risked mismatches during validation.
 
 ### Decision
 Standardize on strict bounds for the creation payload.
@@ -155,3 +139,41 @@ Standardize on strict bounds for the creation payload.
   - `text` or `file` (manuscript text / text file)
 - **Style definition** is deferred entirely to the first pipeline step (`/projects/:id/steps/style`), where the user can customize the visual direction parameter before starting the style extraction.
 - The optional Style Preference field has been removed from the frontend project initialization form to simplify the data ingestion flow and prevent validation issues.
+
+---
+
+## D-007 · Use the official @google/genai SDK instead of hand-written REST calls
+
+**Date:** 2026-08-12  
+**Status:** decided
+
+### Reasoning
+The assessment brief itself notes the newest Interactions API is only wrapped by the Python and JS SDKs so far, with REST as the fallback for stacks without one. Since the backend is TypeScript on Bun, `@google/genai` covers it directly — no reason to hand-roll `fetch` calls, headers, and JSON parsing for something the official SDK already does correctly.
+
+### Upsides
+- Less boilerplate — no manual auth headers, URL building, or response parsing
+- Typed request/response shapes catch mistakes at compile time instead of at runtime
+- Built-in error handling (`ApiError`) instead of manually checking `res.ok`
+
+### Cons accepted
+- One more external dependency versus a zero-dependency raw `fetch` call
+- Slightly less visibility into the exact HTTP request, which made an early endpoint-version mismatch a little harder to spot than reading a raw `curl` would have been
+
+### Limits
+- Ties the code to the SDK's API surface — if Google changes it, `gemini/client.ts` needs updating, not just a URL string
+
+---
+
+## D-008 · Caught the step action button only handling one state, not four
+
+**Date:** 2026-08-12  
+**Status:** decided (AI override)
+
+### What happened
+Each pipeline step has four possible states (`pending`/`running`/`done`/`failed`), and §4.4 requires the UI to reflect each one distinctly. Antigravity's first pass at the step action button only really handled `pending`: a single "Run" button wired to `onClick`, with no branching on step status. I found this by actually exercising the other three states instead of trusting the default render — clicking the button rapidly (it fired the request again while one was already in flight, since nothing disabled it), forcing a failure (no retry affordance appeared, just a dead end), and checking a completed step (the button still read "Run" instead of reflecting `done`).
+
+### Fix
+Made the button's label, enabled/disabled state, and handler all derive from the step's status instead of being a single static element: `pending` → "Run", enabled; `running` → disabled, loading state, no second request possible; `done` → hidden or shown as a completed indicator, not clickable; `failed` → relabeled "Retry", enabled, calls the retry endpoint instead of the normal step endpoint.
+
+### Cost accepted
+- One more branch of UI logic per step card instead of a single static button — small added complexity, but it's exactly the four states the backend's `pipeline_state` already tracks, so no new state had to be invented on the frontend

@@ -23,9 +23,11 @@ and documented decisions matter.
 | Runtime | **Bun** | ✅ D-001 |
 | Backend | **Express 5** + TypeScript | ✅ |
 | Frontend | **React 19** + Vite 8 + TypeScript | ✅ |
-| Styling | **Tailwind CSS** (via `@tailwindcss/vite`) | ✅ |
+| Styling | **Tailwind CSS v4** (via `@tailwindcss/vite`) | ✅ D-005 |
+| State / Data | **TanStack Query v5** + **Axios** | ✅ D-006 |
+| Routing | State-based view switcher (no React Router DOM) | ✅ |
 | Storage | **SQLite** via `bun:sqlite` (built-in) | ✅ D-002 |
-| AI | **Gemini** `@google/genai` SDK (Interactions API) | ✅ |
+| AI | **Gemini** `@google/genai` SDK (Interactions API) | ✅ D-007 |
 | File storage | Local disk `backend/data/{userId}/{projectId}/` | ✅ |
 | Dev runner | `concurrently` from repo root | ✅ |
 
@@ -38,7 +40,7 @@ and documented decisions matter.
 ```
 book-illustrator/
 ├── package.json                ← root scripts: dev, backend, frontend
-├── DECISIONS.md                ← architectural decision records (D-001..D-003)
+├── DECISIONS.md                ← architectural decision records (D-001..D-008)
 ├── AGENTS.md                   ← this file
 ├── docs/
 │   └── Plan.md                 ← full feature plan & data model reference
@@ -67,17 +69,43 @@ book-illustrator/
 │       │   └── steps.ts        ← 5 step endpoints + /:step/retry
 │       ├── gemini/
 │       │   ├── client.ts       ← GoogleGenAI singleton + MODELS constants
-│       │   ├── text-chain.ts   ← runStyleStep, runCharactersStep, runChaptersStep
+│       │   ├── text-chain.ts   ← runStyleStep(bookText, hint), runCharactersStep, runChaptersStep
 │       │   └── image-chain.ts  ← runPortraitStep, runIllustrationStep (dual-mode)
 │       └── storage/
 │           └── files.ts        ← saveBookText, readBookText, saveImage, absolutePath
 └── frontend/
-    ├── vite.config.ts          ← proxy: /api → http://localhost:3001
+    ├── vite.config.ts          ← proxy: /api → http://localhost:3001, /files → http://localhost:3001
     ├── .env                    ← VITE_API_BASE_URL
     ├── .env.example
     └── src/
-        ├── App.tsx             ← currently: connection-test page
-        └── ...
+        ├── index.css           ← Tailwind v4 @theme tokens (Ink, Paper, Moss, Ochre, Sage, Rust)
+        ├── App.tsx             ← Providers (QueryClient + AuthProvider) + view-state router
+        ├── main.tsx            ← createRoot entry
+        ├── App.css             ← empty (cleared; all styling via Tailwind)
+        ├── api/
+        │   ├── axios.ts        ← singleton Axios (baseURL=/api, x-user-id interceptor)
+        │   ├── auth.service.ts ← authService.login
+        │   ├── projects.service.ts ← projectsService.list / get / create
+        │   └── steps.service.ts    ← stepsService.run / retry
+        ├── types/
+        │   ├── auth.ts         ← User, LoginPayload
+        │   ├── project.ts      ← ProjectSummary, ProjectDetail, Character, Chapter
+        │   └── pipeline.ts     ← StepStatus, StepName, PipelineState, STEP_ORDER, currentStep()
+        ├── context/
+        │   └── AuthContext.tsx ← AuthProvider, useAuth — persists user to localStorage
+        ├── hooks/
+        │   ├── useProjects.ts  ← useQuery(['projects'])
+        │   ├── useProject.ts   ← useQuery(['project', id]) + 4s polling while running
+        │   └── useSteps.ts     ← useRunStep, useRetryStep mutations
+        ├── components/
+        │   └── Header.tsx      ← shared top bar (brand + Sign Out)
+        └── pages/
+            ├── login/
+            │   └── index.tsx   ← Login form (dark dot-grid bg, card, name+email fields)
+            └── projects/
+                ├── index.tsx   ← ProjectsList (grid, status badges, 5-bar step progress)
+                ├── new.tsx     ← NewProject form (title + paste/upload tabs)
+                └── detail.tsx  ← ProjectDetail (sidebar stepper OR horizontal banner + 5 step views)
 ```
 
 ---
@@ -89,6 +117,7 @@ book-illustrator/
 PORT=3001
 GEMINI_API_KEY=<your key>
 NODE_ENV=development
+GEMINI_IMAGE_MOCK=true
 ```
 
 ### frontend/.env
@@ -96,8 +125,9 @@ NODE_ENV=development
 VITE_API_BASE_URL=http://localhost:3001
 ```
 
-Vite dev proxy (`/api → backend`) is active — frontend calls `/api/*` in dev,
-`VITE_API_BASE_URL` is used for non-proxied environments only.
+Vite dev proxy:
+- `/api/*` → `http://localhost:3001/*` (API calls)
+- `/files/*` → `http://localhost:3001/files/*` (generated image assets)
 
 ---
 
@@ -138,6 +168,12 @@ Enforced by both TypeScript types (`src/db/schema.ts`) and SQLite `CHECK` constr
 5. **Type safety** — all DB reads must be cast to the types in `src/db/schema.ts`.
    Never use `any` for DB results.
 
+6. **POST /projects only takes `title` + `text|file`** — style hint is deferred to the
+   style step endpoint. Do not add `art_style` back to the creation form. (D-006)
+
+7. **No default Content-Type on the Axios instance** — let Axios auto-detect per request
+   so FormData uploads get `multipart/form-data; boundary=…` automatically. (D-006 bug fix)
+
 ---
 
 ## 7. Backend API Contract (from Plan.md)
@@ -159,7 +195,8 @@ POST   /projects/:id/steps/:step/retry   ← only if failed or stuck running
 
 ## 8. Gemini Call Sequence
 
-1. Upload book text → Files API → get file `uri`
+1. **Book text stored inline** — `POST /projects` saves content to `book.txt` regardless
+   of input method (paste or file upload). No Files API upload. (D-004)
 2. **Text chain** (one interaction, chained via `previous_interaction_id`):
    style → characters (cap 2) → chapters (cap 1)
 3. **Image chain** (separate interaction, seeded with style + system instructions):
@@ -169,7 +206,7 @@ POST   /projects/:id/steps/:step/retry   ← only if failed or stuck running
 
 > **Known blocker:** Gemini image models need paid tier. Vietnamese Visa rejected by
 > Google Billing. Image chain is implemented per spec but validated against mocked
-> responses until resolved.
+> responses until resolved. (`GEMINI_IMAGE_MOCK=true`)
 
 ---
 
@@ -182,30 +219,36 @@ POST   /projects/:id/steps/:step/retry   ← only if failed or stuck running
 | 3 | Auth + project CRUD routes | ✅ Done |
 | 4 | Text chain: style → characters → chapters (step-locking) | ✅ Done |
 | 5 | Image chain: portraits → illustrations (dual-mode) | ✅ Done |
-| 6 | Frontend: stepper + all states, wired to real backend | 🔲 Next |
+| 6 | Frontend: design system, all pages, API layer, wired to backend | ✅ Done |
 | 7 | Resumability / concurrency hardening (kill-server test) | 🔲 |
 | 8 | Tests, TESTING.md, final README, DECISIONS, AGENTS cleanup | 🔲 |
 
-**Current position: start of Phase 6 — frontend UI.**
+**Current position: Phase 6 complete. Next: Phase 7 — hardening.**
 
 ---
 
 ## 10. Code Style Rules
 
+### Backend
 - All files have a top-of-file comment block explaining purpose (see `src/db/*.ts`)
 - No `any` — use proper types or `unknown` with a type guard
 - No barrel re-exports that hide types — each module exports its own types
-- SQL lives in `migrate.ts` only — routes/pipeline never write raw SQL (use helper
-  functions in future `src/db/queries/` files)
-- Mock route handlers in `index.ts` are clearly marked `// TODO: replace with real router`
-  once route modules exist
+- SQL lives in `migrate.ts` only — routes/pipeline never write raw SQL
+
+### Frontend
+- Tailwind CSS v4 only — no inline `style={{}}` props, no raw CSS classes outside `index.css`
+- All pages are in `src/pages/<name>/index.tsx` — folder-per-page convention
+- All API calls go through `src/api/*.service.ts` — no bare `fetch` or `axios` in components
+- All server state is managed by TanStack Query hooks in `src/hooks/`
+- Auth state lives in `AuthContext` — do not read `localStorage` directly in components
+- Types are strict — no `any`, no implicit `unknown`
 
 ---
 
 ## 11. What the AI Agent Knows / Has Done
 
+### Backend (Phases 1–5)
 - Read `docs/Plan.md` in full — data model, API contract, Gemini sequence all understood
-- Researched official Gemini model list — confirmed `gemini-3.5-flash` (text) and `gemini-3.1-flash-image` (image)
 - **Phase 1:** scaffold, mock endpoints, env vars, Vite proxy
 - **Phase 2:** `src/db/` — schema.ts, client.ts, migrate.ts, index.ts wired into server startup
 - **Phase 3:** `src/routes/auth.ts` + `src/db/queries/users.ts` — POST /auth/login (find-or-create)
@@ -216,9 +259,41 @@ POST   /projects/:id/steps/:step/retry   ← only if failed or stuck running
 - `src/storage/files.ts` — saveBookText, readBookText, saveImage
 - `src/db/queries/style.ts`, `characters.ts`, `chapters.ts` — all query helpers
 - Installed `@google/genai@2.16.0`
-- Updated `docs/Plan.md` with model IDs and dual-mode image strategy
-- Updated `DECISIONS.md` D-003 from user's raw note
-- Updated this `AGENTS.md`
+
+### Backend Bug Fixes
+- **D-004 fix:** `runStyleStep` signature changed from `(bookTextPath)` to `(bookText: string)`.
+  Removed `ai.files.upload()` — book text is now passed inline in the prompt. Both paste and
+  upload paths now converge at `book.txt` and behave identically.
+- Steps route updated: reads `book.txt` via `readBookText()` then passes string to `runStyleStep`.
+
+### Frontend (Phase 6)
+- Installed: `axios@1.x`, `@tanstack/react-query@5.x`, `tailwindcss@4.x`, `@tailwindcss/vite@4.x`
+- **Design system** (`frontend/Design.md` + `src/index.css`):
+  - Tailwind v4 `@theme` block with named colour tokens (Ink, Paper, Moss, Ochre, Sage, Rust)
+  - Google Fonts: Fraunces (serif, headings) + Inter (sans, UI)
+  - Dot-grid dark background class `.bg-dot-grid` for Login
+- **API layer** (single Axios instance, per-service files):
+  - `api/axios.ts` — baseURL `/api`, x-user-id interceptor, **no default Content-Type**
+  - `api/auth.service.ts`, `api/projects.service.ts`, `api/steps.service.ts`
+- **Types**: `types/auth.ts`, `types/project.ts`, `types/pipeline.ts` (strict, no `any`)
+- **Auth**: `context/AuthContext.tsx` — find-or-create user, persisted to localStorage
+- **TanStack Query hooks**:
+  - `useProjects` — project list query
+  - `useProject` — single project with auto-poll (4 s) while any step is `'running'`
+  - `useRunStep`, `useRetryStep` — mutations that invalidate `['project', id]` on success
+- **Pages**:
+  - `pages/login/index.tsx` — dark dot-grid bg, centred card, name + email, LOGIN button
+  - `pages/projects/index.tsx` — grid of project cards, 5-bar step progress visualiser, status badges
+  - `pages/projects/new.tsx` — title + paste/upload toggle (tabs), no style field (D-006)
+  - `pages/projects/detail.tsx` — sidebar stepper OR horizontal banner (toggle), context modal,
+    per-step views for style/characters/portraits/chapters/illustrations, retry support
+- **Vite proxy** extended to also forward `/files/*` → backend so image `src` paths work with relative URLs
+- **Fixed** multipart upload bug: removed `headers: { 'Content-Type': 'application/json' }` from
+  the Axios instance so FormData gets the correct `boundary=` header and multer can parse the file
+
+### Documentation Updates
+- `DECISIONS.md` updated through **D-007**
+- This `AGENTS.md` updated to reflect Phase 6 completion
 
 **Known limitation:** `GEMINI_IMAGE_MOCK=true` is the default. Flip to `false` once billing is resolved.
 
@@ -232,3 +307,7 @@ POST   /projects/:id/steps/:step/retry   ← only if failed or stuck running
 - ❌ Do not run migrations manually — `runMigrations()` fires on every server start
 - ❌ Do not commit `.env` files — only `.env.example`
 - ❌ Do not re-debate D-001 / D-002 / D-003 — they are locked
+- ❌ Do not add `art_style` back to the `POST /projects` payload or the creation form (D-006)
+- ❌ Do not set a default `Content-Type` on the Axios instance — it breaks FormData uploads
+- ❌ Do not use inline `style={{}}` props or raw CSS in frontend components — Tailwind only
+- ❌ Do not call `localStorage` directly in components — use `useAuth()` from `AuthContext`
