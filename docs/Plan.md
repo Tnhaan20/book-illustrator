@@ -69,16 +69,31 @@ POST   /projects/:id/steps/:step/retry  -- only valid if step is 'failed' or stu
 
 **Concurrency rule for every step endpoint:** in one SQLite transaction, check `step_x == 'pending'` (or `'failed'` for retry) → set to `'running'` → commit → then call Gemini. If the step is already `'running'` when the request lands, return the current state immediately with no Gemini call. This single pattern satisfies §4.3's resumability, no-duplicate-call, and retryable-failure rules all at once.
 
+**Gemini models (locked — see DECISIONS.md)**
+- Text chain: `gemini-3.5-flash` via `ai.interactions.create()` + `previous_interaction_id`
+- Image chain: `gemini-3.1-flash-image` (Nano Banana 2) via `ai.interactions.create()` + `previous_interaction_id`
+  - Requires paid tier. Use `GEMINI_IMAGE_MOCK=true` in `backend/.env` to skip real calls and
+    receive a placeholder PNG so the full save/serve/DB pipeline can be tested without billing.
+
 **Caps enforced here, not in the frontend:** slice `characters` to 2 and `chapters` to 1 server-side right after parsing Gemini's JSON response, before saving to DB.
 
 ## 4. Gemini call sequence (per DECISIONS.md, confirmed from the notebook)
 
-1. Upload book text → Files API → get file `uri`
-2. **Text chain** — new interaction seeded with the book file → then chained via `previous_interaction_id`:
-   style → characters (JSON, capped to 2) → chapters (JSON, capped to 1)
-3. **Image chain** — separate interaction, seeded with style + system instructions (no book file needed here) → chained via `previous_interaction_id`:
-   portrait per character → illustration per chapter (same chain, so Gemini "sees" prior portraits)
-4. Only `text_interaction_id` and `image_interaction_id` (the latest one in each chain) are persisted — Gemini's server holds the actual history.
+1. Upload book text by txt file or input text field
+2. **Text chain** — `ai.interactions.create()` seeded with the book file:
+   - style → `interactionId` saved as `text_interaction_id`
+   - characters (JSON, capped to 2) → chained via `previous_interaction_id`; new `interactionId` replaces saved one
+   - chapters (JSON, capped to 1) → same chain continuation
+3. **Image chain** — separate `ai.interactions.create()` seeded with style text:
+   - portrait per character → `interactionId` saved as `image_interaction_id`
+   - illustration per chapter → chained via `previous_interaction_id` (model sees prior portraits)
+4. Only `text_interaction_id` and `image_interaction_id` (always the latest in each chain) are
+   persisted — Gemini's server holds the full conversation history.
+
+**Image dual-mode** (`GEMINI_IMAGE_MOCK` env var):
+- `true` → `src/gemini/image-chain.ts` returns a real 1×1 PNG placeholder; no API call made.
+  Exercises the full disk-save / DB-update / `/files/*` serve path for Postman testing.
+- `false` / unset → real `gemini-3.1-flash-image` call via Interactions API (paid tier required).
 
 ## 5. Frontend screens
 
