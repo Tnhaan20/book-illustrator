@@ -17,6 +17,7 @@
     "typescript": "^7.0.2"
   },
   "dependencies": {
+    "@google/genai": "^2.16.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "multer": "^2.2.0"
