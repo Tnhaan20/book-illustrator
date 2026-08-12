@@ -4,13 +4,17 @@
 
 | Layer | Choice | Why |
 |---|---|---|
-| Backend | Node.js + TypeScript + Express | Matches existing skillset, minimal setup, first-class `fetch` for REST calls to Gemini |
-| Frontend | React + Vite + TypeScript | Simple SPA, no SSR needed, fast dev loop |
-| Storage | SQLite (via `bun:sqlite` — Bun built-in) | Transactions give atomic step-locking for free — solves the hardest requirement (no duplicate calls) without hand-rolled file locking. No server process, no docker-compose needed. Native Bun API — zero extra dependency, faster than `better-sqlite3` via N-API. |
-| Files (book text, images) | Local disk under `/data/{userId}/{projectId}/` | Per spec §5.2 — served via a static Express route, no S3/CDN |
-| Gemini access | REST, `https://generativelanguage.googleapis.com/v1beta2/interactions` | Interactions API — see `DECISIONS.md` for model IDs chosen |
+| Runtime | Bun + TypeScript | Single tool for runtime, package manager, and test runner; built-in `bun:sqlite` removes a native-dependency risk |
+| Backend | Express | Matches existing skillset, minimal setup, first-class `fetch`/SDK calls to Gemini |
+| Frontend | React + Vite + TypeScript + Tailwind | Simple SPA, no SSR needed, fast dev loop |
+| Storage | SQLite (via `bun:sqlite`, built-in) | Transactions give atomic step-locking for free — solves the hardest requirement (no duplicate calls) without hand-rolled file locking. No server process, no docker-compose needed. See `DECISIONS.md` D-002 for SQLite vs JSON. |
+| Files (book text, images) | Local disk under `backend/data/{userId}/{projectId}/` | Per spec §5.2 — served via a static Express route, no S3/CDN |
+| Gemini access | `@google/genai` SDK (Interactions API, not `generateContent`) | Official JS SDK wraps the Interactions API per Gemini's own docs — see `DECISIONS.md` for model IDs chosen |
+| AI coding tool | Google Antigravity | Context file is `AGENTS.md` (Antigravity's convention), not `CLAUDE.md` — functionally equivalent artifact per spec §2.2 |
 
-No `docker-compose.yml` — SQLite + local disk means `bun install && bun run dev` is enough. State this explicitly in `README.md`.
+**Repo layout:** `backend/` and `frontend/` are independent (own `package.json`, own `node_modules`) — no npm/bun workspaces. Root `package.json` only holds `concurrently` to run both via one `bun run dev`. No `docker-compose.yml` — SQLite + local disk means `bun install && bun run dev` is enough per side. State this explicitly in `README.md`.
+
+**Known blocker (as of Aug 2026):** Gemini's image-generation models require paid tier; free tier shows `limit: 0`. Payment method could not be provisioned (Google Billing rejecting Vietnamese-issued Visa). Backend implements the image-chain calls per the API contract, but validated via mocked responses until resolved — see `DECISIONS.md`.
 
 ## 2. Data model (SQLite tables)
 
@@ -94,7 +98,7 @@ Reference `app-demo.html` for scope, but real timings (10–30s+) and real error
 
 ## 7. Build order
 
-1. Scaffold monorepo (`/backend`, `/frontend`), SQLite schema via `bun:sqlite`
+1. Scaffold repo, SQLite schema
 2. Auth + project CRUD (no Gemini yet)
 3. Text chain: style → characters → chapters (with caps + step-locking)
 4. Image chain: portraits → illustrations
