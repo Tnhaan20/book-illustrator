@@ -79,7 +79,7 @@ export default function Login({ onSuccess }: LoginProps) {
               onChange={(e) => setName(e.target.value)}
               placeholder="Enter your full name"
               disabled={loading}
-              className="w-full px-3.5 py-2.5 bg-paper border border-ink/25 rounded font-sans text-sm placeholder:text-ink/40 text-ink focus:outline-none focus:border-ochre focus:ring-2 focus:ring-ochre/25 transition-all"
+              className="w-full px-3.5 py-2.5 bg-paper border border-ink/25 rounded font-sans text-sm placeholder:text-ink/40 text-ink focus:outline-none focus:border-ochre focus:ring-2 focus:ring-ochre/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             />
           </div>
 
@@ -94,7 +94,7 @@ export default function Login({ onSuccess }: LoginProps) {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="Enter your email address"
               disabled={loading}
-              className="w-full px-3.5 py-2.5 bg-paper border border-ink/25 rounded font-sans text-sm placeholder:text-ink/40 text-ink focus:outline-none focus:border-ochre focus:ring-2 focus:ring-ochre/25 transition-all"
+              className="w-full px-3.5 py-2.5 bg-paper border border-ink/25 rounded font-sans text-sm placeholder:text-ink/40 text-ink focus:outline-none focus:border-ochre focus:ring-2 focus:ring-ochre/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             />
           </div>
 
@@ -102,9 +102,14 @@ export default function Login({ onSuccess }: LoginProps) {
           <button
             type="submit"
             disabled={loading}
-            className="mt-4 font-sans text-xs font-bold tracking-widest text-ink uppercase hover:text-ochre transition-colors flex items-center justify-center gap-1.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-ochre rounded cursor-pointer"
+            className="mt-4 font-sans text-xs font-bold tracking-widest text-ink uppercase hover:text-ochre transition-colors flex items-center justify-center gap-2 py-2.5 focus:outline-none focus:ring-2 focus:ring-ochre rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:text-ink"
           >
-            {loading ? 'AUTHENTICATING...' : 'LOGIN →'}
+            {loading ? (
+              <>
+                <div className="w-3.5 h-3.5 border-2 border-ink/40 border-t-ink rounded-full animate-spin" />
+                AUTHENTICATING...
+              </>
+            ) : 'LOGIN →'}
           </button>
         </form>
 

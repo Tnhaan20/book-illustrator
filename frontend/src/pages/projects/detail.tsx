@@ -14,6 +14,8 @@ export default function ProjectDetail({ projectId, onGoBack }: ProjectDetailProp
   const { data: project, isLoading, error } = useProject(projectId);
   const runStepMutation = useRunStep(projectId);
   const retryStepMutation = useRetryStep(projectId);
+  // True while any mutation is in-flight — blocks double-fire on any button
+  const isMutating = runStepMutation.isPending || retryStepMutation.isPending;
   
   // UI states
   const [activeStepTab, setActiveStepTab] = useState<StepName>('style');
@@ -121,9 +123,12 @@ export default function ProjectDetail({ projectId, onGoBack }: ProjectDetailProp
           </div>
           <button
             onClick={() => handleRetryStep(step)}
-            className="bg-rust hover:bg-rust/90 text-white font-sans text-xs font-bold px-4 py-2 rounded transition-colors"
+            disabled={isMutating}
+            className="bg-rust hover:bg-rust/90 text-white font-sans text-xs font-bold px-4 py-2 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
-            Retry Step
+            {isMutating ? (
+              <><div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" /> Retrying...</>
+            ) : 'Retry Step'}
           </button>
         </div>
       );
@@ -136,12 +141,15 @@ export default function ProjectDetail({ projectId, onGoBack }: ProjectDetailProp
           <div className="flex flex-col gap-6">
             {status === 'done' ? (
               <div className="bg-sage/20 border border-ink/10 p-6 rounded-lg">
-                <h4 className="font-serif text-lg font-medium text-ink mb-2">Art Director's Guide</h4>
+                <div className="flex items-center gap-2 mb-3">
+                  <svg className="w-4 h-4 stroke-moss fill-none stroke-[2]" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  <h4 className="font-serif text-lg font-medium text-ink">Art Director's Guide</h4>
+                </div>
                 <p className="font-serif text-base italic text-ink/80 leading-relaxed">
                   "{project.style}"
                 </p>
               </div>
-            ) : (
+            ) : status === 'pending' ? (
               <div className="border border-ink/10 p-6 rounded-lg bg-sage/5 flex flex-col gap-4">
                 <p className="font-sans text-sm text-ink/65">
                   Let Gemini analyze the text and outline a visual direction. You can optionally suggest a hint below.
@@ -155,48 +163,53 @@ export default function ProjectDetail({ projectId, onGoBack }: ProjectDetailProp
                     value={customStyleText}
                     onChange={(e) => setCustomStyleText(e.target.value)}
                     placeholder="e.g., watercolor, woodcut print, monochrome pencil drawing"
-                    className="px-3 py-2 bg-paper border border-ink/20 rounded font-sans text-sm placeholder:text-ink/30 text-ink focus:outline-none focus:border-ochre"
+                    disabled={isMutating}
+                    className="px-3 py-2 bg-paper border border-ink/20 rounded font-sans text-sm placeholder:text-ink/30 text-ink focus:outline-none focus:border-ochre disabled:opacity-50"
                   />
                 </div>
                 <button
                   onClick={() => handleRunStep('style')}
-                  disabled={isStepDisabled('style')}
-                  className="w-fit bg-ink hover:bg-ink/90 text-paper font-sans text-xs font-bold px-5 py-2.5 rounded disabled:opacity-50"
+                  disabled={isStepDisabled('style') || isMutating}
+                  className="w-fit bg-ink hover:bg-ink/90 text-paper font-sans text-xs font-bold px-5 py-2.5 rounded disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
-                  Process Style
+                  {isMutating ? <><div className="w-3 h-3 border border-paper border-t-transparent rounded-full animate-spin" /> Processing...</> : 'Process Style'}
                 </button>
               </div>
-            )}
+            ) : null}
           </div>
         );
 
       case 'characters':
         return (
           <div className="flex flex-col gap-6">
-            {status === 'done' && project.characters.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {project.characters.map((char) => (
-                  <div key={char.id} className="bg-sage/20 border border-ink/10 p-6 rounded-lg flex flex-col gap-2">
-                    <span className="font-sans text-[10px] uppercase font-bold tracking-widest text-ochre">Subject Profile</span>
-                    <h4 className="font-serif text-xl font-medium text-ink">{char.name}</h4>
-                    <p className="font-sans text-xs text-ink/65 leading-relaxed">{char.prompt}</p>
-                  </div>
-                ))}
-              </div>
-            ) : (
+            {status === 'done' ? (
+              project.characters.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {project.characters.map((char) => (
+                    <div key={char.id} className="bg-sage/20 border border-ink/10 p-6 rounded-lg flex flex-col gap-2">
+                      <span className="font-sans text-[10px] uppercase font-bold tracking-widest text-ochre">Subject Profile</span>
+                      <h4 className="font-serif text-xl font-medium text-ink">{char.name}</h4>
+                      <p className="font-sans text-xs text-ink/65 leading-relaxed">{char.prompt}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-6 border border-moss/20 bg-moss/5 rounded-lg font-sans text-sm text-ink/60">
+                  Step completed — no character profiles were identified in the manuscript.
+                </div>
+              )
+            ) : status === 'pending' ? (
               <div className="border border-ink/10 p-6 rounded-lg bg-sage/5 flex flex-col gap-4">
-                <p className="font-sans text-sm text-ink/65">
-                  Identify and define the key subjects from the manuscript.
-                </p>
+                <p className="font-sans text-sm text-ink/65">Identify and define the key subjects from the manuscript.</p>
                 <button
                   onClick={() => handleRunStep('characters')}
-                  disabled={isStepDisabled('characters')}
-                  className="w-fit bg-ink hover:bg-ink/90 text-paper font-sans text-xs font-bold px-5 py-2.5 rounded disabled:opacity-50"
+                  disabled={isStepDisabled('characters') || isMutating}
+                  className="w-fit bg-ink hover:bg-ink/90 text-paper font-sans text-xs font-bold px-5 py-2.5 rounded disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
-                  Identify Characters
+                  {isMutating ? <><div className="w-3 h-3 border border-paper border-t-transparent rounded-full animate-spin" /> Processing...</> : 'Identify Characters'}
                 </button>
               </div>
-            )}
+            ) : null}
           </div>
         );
 
@@ -247,46 +260,48 @@ export default function ProjectDetail({ projectId, onGoBack }: ProjectDetailProp
                   );
                 })}
               </div>
-            ) : (
+            ) : status === 'pending' ? (
               <div className="border border-ink/10 p-6 rounded-lg bg-sage/5 flex flex-col gap-4">
-                <p className="font-sans text-sm text-ink/65">
-                  Generate portrait sketch illustrations based on the profiles identified in the previous step.
-                </p>
+                <p className="font-sans text-sm text-ink/65">Generate portrait sketches from the identified character profiles.</p>
                 <button
                   onClick={() => handleRunStep('portraits')}
-                  disabled={isStepDisabled('portraits')}
-                  className="w-fit bg-ink hover:bg-ink/90 text-paper font-sans text-xs font-bold px-5 py-2.5 rounded disabled:opacity-50"
+                  disabled={isStepDisabled('portraits') || isMutating}
+                  className="w-fit bg-ink hover:bg-ink/90 text-paper font-sans text-xs font-bold px-5 py-2.5 rounded disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
-                  Process Portraits
+                  {isMutating ? <><div className="w-3 h-3 border border-paper border-t-transparent rounded-full animate-spin" /> Processing...</> : 'Process Portraits'}
                 </button>
               </div>
-            )}
+            ) : null}
           </div>
         );
 
       case 'chapters':
         return (
           <div className="flex flex-col gap-6">
-            {status === 'done' && project.chapters.length > 0 ? (
-              <div className="bg-sage/20 border border-ink/10 p-6 rounded-lg flex flex-col gap-2">
-                <span className="font-sans text-[10px] uppercase font-bold tracking-widest text-ochre">Thematic Chapter Scene</span>
-                <h4 className="font-serif text-xl font-medium text-ink">{project.chapters[0].name}</h4>
-                <p className="font-sans text-xs text-ink/65 leading-relaxed">{project.chapters[0].prompt}</p>
-              </div>
-            ) : (
+            {status === 'done' ? (
+              project.chapters.length > 0 ? (
+                <div className="bg-sage/20 border border-ink/10 p-6 rounded-lg flex flex-col gap-2">
+                  <span className="font-sans text-[10px] uppercase font-bold tracking-widest text-ochre">Thematic Chapter Scene</span>
+                  <h4 className="font-serif text-xl font-medium text-ink">{project.chapters[0].name}</h4>
+                  <p className="font-sans text-xs text-ink/65 leading-relaxed">{project.chapters[0].prompt}</p>
+                </div>
+              ) : (
+                <div className="p-6 border border-moss/20 bg-moss/5 rounded-lg font-sans text-sm text-ink/60">
+                  Step completed — no chapter scenes were identified.
+                </div>
+              )
+            ) : status === 'pending' ? (
               <div className="border border-ink/10 p-6 rounded-lg bg-sage/5 flex flex-col gap-4">
-                <p className="font-sans text-sm text-ink/65">
-                  Identify the most visually dramatic chapter scene for illustration.
-                </p>
+                <p className="font-sans text-sm text-ink/65">Identify the most visually dramatic chapter scene for illustration.</p>
                 <button
                   onClick={() => handleRunStep('chapters')}
-                  disabled={isStepDisabled('chapters')}
-                  className="w-fit bg-ink hover:bg-ink/90 text-paper font-sans text-xs font-bold px-5 py-2.5 rounded disabled:opacity-50"
+                  disabled={isStepDisabled('chapters') || isMutating}
+                  className="w-fit bg-ink hover:bg-ink/90 text-paper font-sans text-xs font-bold px-5 py-2.5 rounded disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
-                  Identify Chapter Scene
+                  {isMutating ? <><div className="w-3 h-3 border border-paper border-t-transparent rounded-full animate-spin" /> Processing...</> : 'Identify Chapter Scene'}
                 </button>
               </div>
-            )}
+            ) : null}
           </div>
         );
 
@@ -336,20 +351,18 @@ export default function ProjectDetail({ projectId, onGoBack }: ProjectDetailProp
                   );
                 })}
               </div>
-            ) : (
+            ) : status === 'pending' ? (
               <div className="border border-ink/10 p-6 rounded-lg bg-sage/5 flex flex-col gap-4">
-                <p className="font-sans text-sm text-ink/65">
-                  Generate landscape art for the selected chapter scene.
-                </p>
+                <p className="font-sans text-sm text-ink/65">Generate landscape art for the selected chapter scene.</p>
                 <button
                   onClick={() => handleRunStep('illustrations')}
-                  disabled={isStepDisabled('illustrations')}
-                  className="w-fit bg-ink hover:bg-ink/90 text-paper font-sans text-xs font-bold px-5 py-2.5 rounded disabled:opacity-50"
+                  disabled={isStepDisabled('illustrations') || isMutating}
+                  className="w-fit bg-ink hover:bg-ink/90 text-paper font-sans text-xs font-bold px-5 py-2.5 rounded disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
-                  Generate Illustrations
+                  {isMutating ? <><div className="w-3 h-3 border border-paper border-t-transparent rounded-full animate-spin" /> Processing...</> : 'Generate Illustrations'}
                 </button>
               </div>
-            )}
+            ) : null}
           </div>
         );
     }

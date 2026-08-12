@@ -25,7 +25,7 @@ export default function ProjectsList({ onSelectProject, onCreateNew }: ProjectsL
   };
 
   const getStageLabel = (progress: StepProgress | null, overallStatus: string): string => {
-    if (overallStatus === 'done') return 'Archived';
+    if (overallStatus === 'done') return 'Done';
     if (!progress) return 'Research';
     
     // Find first step that is not 'done'
@@ -48,16 +48,11 @@ export default function ProjectsList({ onSelectProject, onCreateNew }: ProjectsL
   const formatDate = (dateStr: string) => {
     try {
       const date = new Date(dateStr);
-      // Make it look historical, e.g. "Oct 12, 1894" or "Nov 04, 1894"
-      // Let's use the year from the DB but if it's 2026, let's keep it or subtract to look historical?
-      // No, let's just format it cleanly like "Oct 12, 1894" style using the local date's components,
-      // but let's shift the year to the late 19th century to match the aesthetic if we want, or just print it.
-      // Let's just format it beautifully as Month DD, YYYY.
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       const m = months[date.getMonth()];
       const d = String(date.getDate()).padStart(2, '0');
-      // Shift year to 1890s for flavor! (e.g. 2026 - 132 = 1894)
-      const y = date.getFullYear() - 132;
+        
+      const y = date.getFullYear();
       return `${m} ${d}, ${y}`;
     } catch {
       return 'Oct 12, 1894';
