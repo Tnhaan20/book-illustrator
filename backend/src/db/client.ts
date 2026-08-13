@@ -9,15 +9,21 @@
 
 import { Database } from "bun:sqlite";
 import path from "node:path";
+import fs from "node:fs";
 
-/** Resolve DB path relative to the backend root, not the CWD. */
-const DB_PATH = path.join(
+/** Resolve DB directory and ensure it exists. */
+const DATA_DIR = path.join(
   import.meta.dir,   // …/backend/src/db
   "..",              // …/backend/src
   "..",              // …/backend
-  "data",
-  "app.db"
+  "data"
 );
+
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+const DB_PATH = path.join(DATA_DIR, "app.db");
 
 /**
  * The single shared Database connection for the whole process.
