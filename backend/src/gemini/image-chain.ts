@@ -1,8 +1,6 @@
 
 import { ai, MODELS } from "./client.ts";
 
-const IS_MOCK = process.env.GEMINI_IMAGE_MOCK === "true";
-
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface ImageResult {
@@ -10,21 +8,6 @@ export interface ImageResult {
   /** Raw base-64 encoded PNG/JPEG bytes */
   imageBase64: string;
   mimeType: string;
-}
-
-// ── Mock helper ───────────────────────────────────────────────────────────────
-
-function mockImageBase64(): string {
-  // 1×1 red pixel PNG (67 bytes, standard minimal PNG)
-  return "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg==";
-}
-
-function mockImageResult(previousId: string): ImageResult {
-  return {
-    interactionId: `mock-img-${crypto.randomUUID()}`,
-    imageBase64: mockImageBase64(),
-    mimeType: "image/png",
-  };
 }
 
 // ── Real SDK helpers ──────────────────────────────────────────────────────────
@@ -58,8 +41,6 @@ export async function runPortraitStep(
   characterPrompt: string,
   prevInteractionId: string | null
 ): Promise<ImageResult> {
-  if (IS_MOCK) return mockImageResult(prevInteractionId ?? "");
-
   const prompt =
     `Art style: ${styleText}\n\n` +
     `Generate a character portrait of "${characterName}": ${characterPrompt}. ` +
@@ -88,8 +69,6 @@ export async function runIllustrationStep(
   chapterPrompt: string,
   prevInteractionId: string | null
 ): Promise<ImageResult> {
-  if (IS_MOCK) return mockImageResult(prevInteractionId ?? "");
-
   const prompt =
     `Art style: ${styleText}\n\n` +
     `Generate a full-page book illustration for the scene "${chapterName}": ${chapterPrompt}. ` +

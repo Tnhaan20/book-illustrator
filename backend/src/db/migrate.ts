@@ -86,7 +86,7 @@ export function runMigrations(): void {
 
     // ── characters ───────────────────────────────────────────────────────────
     // Up to 2 characters per project (cap enforced server-side after Gemini
-    // parse — see Plan.md §3, "Caps enforced here, not in the frontend").
+    // parse — see docs/specification-plan.md §3, "Caps enforced here, not in the frontend").
     // portrait_path is NULL until the portraits step completes for this row.
     db.run(`
       CREATE TABLE IF NOT EXISTS characters (

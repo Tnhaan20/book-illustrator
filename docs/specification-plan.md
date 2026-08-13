@@ -14,7 +14,7 @@
 
 **Repo layout:** `backend/` and `frontend/` are independent (own `package.json`, own `node_modules`) — no npm/bun workspaces. Root `package.json` only holds `concurrently` to run both via one `bun run dev`. No `docker-compose.yml` — SQLite + local disk means `bun install && bun run dev` is enough per side. State this explicitly in `README.md`.
 
-**Known blocker (as of Aug 2026):** Gemini's image-generation models require paid tier; free tier shows `limit: 0`. Payment method could not be provisioned (Google Billing rejecting Vietnamese-issued Visa). Backend implements the image-chain calls per the API contract, but validated via mocked responses until resolved — see `DECISIONS.md`.
+**Known limitation (as of Aug 2026):** Gemini's image-generation models require a paid tier; the free tier shows `limit: 0`. Payment method could not be provisioned (Google Billing rejecting Vietnamese-issued Visa). However, the backend calls the real Gemini Image API directly with no runtime mock fallback.
 
 ## 2. Data model (SQLite tables)
 
@@ -23,7 +23,7 @@ users
   id, email (unique), name, created_at
 
 projects
-  id, user_id, title, book_text_path, art_style (nullable, user-supplied),
+  id, user_id, title, book_text_path,
   status ('draft' | 'in_progress' | 'done'), created_at
 
 pipeline_state          -- one row per project
@@ -71,9 +71,7 @@ POST   /projects/:id/steps/:step/retry  -- only valid if step is 'failed' or stu
 
 **Gemini models (locked — see DECISIONS.md)**
 - Text chain: `gemini-3.5-flash` via `ai.interactions.create()` + `previous_interaction_id`
-- Image chain: `gemini-3.1-flash-image` (Nano Banana 2) via `ai.interactions.create()` + `previous_interaction_id`
-  - Requires paid tier. Use `GEMINI_IMAGE_MOCK=true` in `backend/.env` to skip real calls and
-    receive a placeholder PNG so the full save/serve/DB pipeline can be tested without billing.
+- Image chain: `gemini-3.1-flash-image` (Nano Banana 2) via `ai.interactions.create()` + `previous_interaction_id` (requires paid tier; runs directly without mock fallbacks).
 
 **Caps enforced here, not in the frontend:** slice `characters` to 2 and `chapters` to 1 server-side right after parsing Gemini's JSON response, before saving to DB.
 
@@ -89,11 +87,6 @@ POST   /projects/:id/steps/:step/retry  -- only valid if step is 'failed' or stu
    - illustration per chapter → chained via `previous_interaction_id` (model sees prior portraits)
 4. Only `text_interaction_id` and `image_interaction_id` (always the latest in each chain) are
    persisted — Gemini's server holds the full conversation history.
-
-**Image dual-mode** (`GEMINI_IMAGE_MOCK` env var):
-- `true` → `src/gemini/image-chain.ts` returns a real 1×1 PNG placeholder; no API call made.
-  Exercises the full disk-save / DB-update / `/files/*` serve path for Postman testing.
-- `false` / unset → real `gemini-3.1-flash-image` call via Interactions API (paid tier required).
 
 ## 5. Frontend screens
 
@@ -111,12 +104,14 @@ Reference `app-demo.html` for scope, but real timings (10–30s+) and real error
 - **Frontend**: component tests for the stepper's loading/error/empty states.
 - **Nice to have**: one mocked end-to-end happy path through all 5 steps.
 
-## 7. Build order
+## 7. Build order (9 phases, 8 complete)
 
-1. Scaffold repo, SQLite schema
-2. Auth + project CRUD (no Gemini yet)
-3. Text chain: style → characters → chapters (with caps + step-locking)
-4. Image chain: portraits → illustrations
-5. Frontend: stepper + all states, wired to real backend
-6. Resumability/concurrency hardening — test by killing the server mid-call
-7. Tests, TESTING.md, DECISIONS.md, README.md, .env.example
+1. Scaffold repo, bun monorepo, mock endpoints, env vars (Done)
+2. SQLite schema + migrations wired into server startup (Done)
+3. Auth + project CRUD routes (Done)
+4. Text chain: style → characters → chapters (step-locking) (Done)
+5. Image chain: portraits → illustrations (Done)
+6. Frontend: design system, all pages, API layer, wired to backend (Done)
+7. Hardening: sidebar lock, completed-project view, retry auto-advance, remove mocks, drop art_style from creation (Done)
+8. Tests, TESTING.md, final README, DECISIONS, AGENTS cleanup (Done)
+9. Production release & final deployment verification (Pending)

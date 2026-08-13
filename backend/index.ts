@@ -36,7 +36,7 @@ app.get("/health", (_req, res) => {
     message: "Book Illustrator API is running",
     timestamp: new Date().toISOString(),
     env: process.env.NODE_ENV ?? "development",
-    imageMode: process.env.GEMINI_IMAGE_MOCK === "true" ? "mock" : "real",
+    imageMode: "real",
   });
 });
 
@@ -45,5 +45,5 @@ app.listen(PORT, () => {
   console.log(`[backend] listening on http://localhost:${PORT}`);
   console.log(`[backend] NODE_ENV=${process.env.NODE_ENV}`);
   console.log(`[backend] GEMINI_API_KEY present: ${!!process.env.GEMINI_API_KEY}`);
-  console.log(`[backend] image mode: ${process.env.GEMINI_IMAGE_MOCK === "true" ? "MOCK" : "REAL (paid)"}`);
+  console.log("[backend] image mode: REAL (paid)");
 });

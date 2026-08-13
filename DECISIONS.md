@@ -99,10 +99,10 @@ Loses the Files API's token-caching benefit for very long books — inline text 
 **Status:** decided
 
 ### Problem
-The frontend needed a distinct visual concept — a naturalist's field notebook, blending scientific precision with archival texture — plus a defined palette, typography, component states, and two stepper layouts (with/without sidebar). So I decided to use Google Stitch for making the UI and the color palette for the frontend.
+The frontend needed a distinct visual concept — a naturalist's field notebook, blending scientific precision with archival texture — plus a defined palette, typography, component states, and two stepper layouts (with/without sidebar).
 
 ### Decision
-Standardize on the **Botanical Field Notebook** specification outlined in `frontend/Design.md`.
+Used Google Stitch to generate the UI and color palette, standardizing on the **Botanical Field Notebook** specification outlined in `frontend/Design.md`.
 - **Palette (Tactile Pigments):**
   - Ink (`#1F2A24`): Primary text and glyphs for contrast.
   - Paper (`#F1EFE6` / `#f0fdf3` container colors): Warm, organic background to mimic archival sheets.
@@ -129,16 +129,14 @@ Standardize on the **Botanical Field Notebook** specification outlined in `front
 **Date:** 2026-08-12  
 **Status:** decided (AI override)
 
-### Problem
+### What happened
 The initial `NewProject` form had an optional style field that posted `art_style` to `POST /projects`. But style generation is its own pipeline step (`/projects/:id/steps/style`, which already accepts `{ style }`) — collecting it at creation time duplicated the parameter and risked mismatches during validation.
 
-### Decision
-Standardize on strict bounds for the creation payload.
-- **`POST /projects`** accepts ONLY the core identifier and content variables:
-  - `title` (text)
-  - `text` or `file` (manuscript text / text file)
-- **Style definition** is deferred entirely to the first pipeline step (`/projects/:id/steps/style`), where the user can customize the visual direction parameter before starting the style extraction.
-- The optional Style Preference field has been removed from the frontend project initialization form to simplify the data ingestion flow and prevent validation issues.
+### Fix
+Standardized on strict bounds for the creation payload — `POST /projects` accepts ONLY `title` and `text`/`file` (manuscript text or text file). Style definition is deferred entirely to the first pipeline step, where the user can customize the visual direction right before style extraction runs. The optional Style Preference field was removed from the frontend project initialization form.
+
+### Cost accepted
+- None functionally — this was pure removal of an unnecessary field; it did mean re-checking that no other part of the frontend still referenced the removed field before deleting it
 
 ---
 
@@ -196,6 +194,6 @@ The "Continue to next step" button is now gated on every item in the current ste
 
 ---
 
-## 10. If You Had One More Day, What Would You Build Next and Why?
+## If I had one more day...
 
-I'd focus on validating the two image-generation steps (portraits, illustrations) against a live paid Gemini key — everything else in the pipeline has been verified, including a real server-crash-and-recover test (see TESTING.md §5), but image output itself remains unverified due to an unresolved billing blocker (a Vietnamese-issued Visa was rejected by Google Billing; see DECISIONS.md D-004/D-006/D-009 context). I'd also add the retry/attempt history bonus feature, since `step_started_at` already exists in the schema and makes it a small addition once image generation is confirmed working.
+I'd focus on validating the two image-generation steps (portraits, illustrations) against a live paid Gemini key — everything else in the pipeline has been verified, including a real server-crash-and-recover test (see TESTING.md §5), but image output itself remains unverified due to an unresolved billing blocker (a Vietnamese-issued Visa was rejected by Google Billing). I'd also add the retry/attempt history bonus feature, since `step_started_at` already exists in the schema and makes it a small addition once image generation is confirmed working.

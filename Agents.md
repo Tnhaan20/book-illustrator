@@ -43,7 +43,7 @@ book-illustrator/
 ├── DECISIONS.md                ← architectural decision records (D-001..D-008)
 ├── AGENTS.md                   ← this file
 ├── docs/
-│   └── Plan.md                 ← full feature plan & data model reference
+│   └── specification-plan.md   ← full feature plan & data model reference
 ├── backend/
 │   ├── index.ts                ← server entry point (Express + migrations + static files)
 │   ├── .env                    ← PORT, GEMINI_API_KEY, NODE_ENV, GEMINI_IMAGE_MOCK
@@ -117,7 +117,6 @@ book-illustrator/
 PORT=3001
 GEMINI_API_KEY=<your key>
 NODE_ENV=development
-GEMINI_IMAGE_MOCK=true
 ```
 
 ### frontend/.env
@@ -135,7 +134,7 @@ Vite dev proxy:
 
 ```
 users             id, email (UNIQUE), name, created_at
-projects          id, user_id→users, title, book_text_path, art_style, status, created_at
+projects          id, user_id→users, title, book_text_path, status, created_at
 pipeline_state    project_id→projects (PK),
                   text_interaction_id, image_interaction_id,
                   step_style, step_characters, step_portraits,
@@ -176,7 +175,7 @@ Enforced by both TypeScript types (`src/db/schema.ts`) and SQLite `CHECK` constr
 
 ---
 
-## 7. Backend API Contract (from Plan.md)
+## 7. Backend API Contract (from docs/specification-plan.md)
 
 ```
 POST   /auth/login                  { email, name }        → user
@@ -204,9 +203,8 @@ POST   /projects/:id/steps/:step/retry   ← only if failed or stuck running
 4. Only `text_interaction_id` and `image_interaction_id` (latest in each chain)
    are persisted in `pipeline_state` — Gemini server holds the history.
 
-> **Known blocker:** Gemini image models need paid tier. Vietnamese Visa rejected by
-> Google Billing. Image chain is implemented per spec but validated against mocked
-> responses until resolved. (`GEMINI_IMAGE_MOCK=true`)
+> **Known limitation:** Gemini image models need paid tier. Vietnamese Visa rejected by
+> Google Billing. Image chain is implemented per spec but runs directly without mock fallbacks.
 
 ---
 
@@ -218,7 +216,7 @@ POST   /projects/:id/steps/:step/retry   ← only if failed or stuck running
 | 2 | SQLite schema + migrations wired into server startup | ✅ Done |
 | 3 | Auth + project CRUD routes | ✅ Done |
 | 4 | Text chain: style → characters → chapters (step-locking) | ✅ Done |
-| 5 | Image chain: portraits → illustrations (dual-mode) | ✅ Done |
+| 5 | Image chain: portraits → illustrations | ✅ Done |
 | 6 | Frontend: design system, all pages, API layer, wired to backend | ✅ Done |
 | 7 | Hardening: sidebar lock, completed-project view, retry auto-advance, remove mocks, drop art_style from creation | ✅ Done |
 | 8 | Tests, TESTING.md, final README, DECISIONS, AGENTS cleanup | ✅ Done |
@@ -265,13 +263,13 @@ POST   /projects/:id/steps/:step/retry   ← only if failed or stuck running
 ## 11. What the AI Agent Knows / Has Done
 
 ### Backend (Phases 1–5)
-- Read `docs/Plan.md` in full — data model, API contract, Gemini sequence all understood
+- Read `docs/specification-plan.md` in full — data model, API contract, Gemini sequence all understood
 - **Phase 1:** scaffold, mock endpoints, env vars, Vite proxy
 - **Phase 2:** `src/db/` — schema.ts, client.ts, migrate.ts, index.ts wired into server startup
 - **Phase 3:** `src/routes/auth.ts` + `src/db/queries/users.ts` — POST /auth/login (find-or-create)
 - **Phase 3:** `src/routes/projects.ts` + `src/db/queries/projects.ts` — GET/POST /projects, GET /projects/:id
 - **Phase 4:** `src/gemini/text-chain.ts` — runStyleStep, runCharactersStep, runChaptersStep using Interactions API
-- **Phase 5:** `src/gemini/image-chain.ts` — dual-mode portrait/illustration (mock PNG or real gemini-3.1-flash-image)
+- **Phase 5:** `src/gemini/image-chain.ts` — real gemini-3.1-flash-image
 - **Phase 4+5:** `src/routes/steps.ts` — all 5 step endpoints + retry, full step-locking via `src/db/queries/pipeline.ts`
 - `src/storage/files.ts` — saveBookText, readBookText, saveImage
 - `src/db/queries/style.ts`, `characters.ts`, `chapters.ts` — all query helpers
@@ -311,8 +309,6 @@ POST   /projects/:id/steps/:step/retry   ← only if failed or stuck running
 ### Documentation Updates
 - `DECISIONS.md` updated through **D-007**
 - This `AGENTS.md` updated to reflect Phase 6 completion
-
-**Known limitation:** `GEMINI_IMAGE_MOCK=true` is the default. Flip to `false` once billing is resolved.
 
 ---
 

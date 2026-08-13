@@ -22,7 +22,6 @@ Ensure the following variables are defined in `backend/.env`:
 - `PORT=3001`
 - `GEMINI_API_KEY=AIzaSy...` (your Google Studio key)
 - `NODE_ENV=development`
-- `GEMINI_IMAGE_MOCK=false` (toggle to `true` to test the image chain without running actual billing API requests)
 
 Ensure `frontend/.env` contains:
 - `VITE_API_BASE_URL=http://localhost:3001`
