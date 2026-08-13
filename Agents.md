@@ -220,10 +220,27 @@ POST   /projects/:id/steps/:step/retry   ← only if failed or stuck running
 | 4 | Text chain: style → characters → chapters (step-locking) | ✅ Done |
 | 5 | Image chain: portraits → illustrations (dual-mode) | ✅ Done |
 | 6 | Frontend: design system, all pages, API layer, wired to backend | ✅ Done |
-| 7 | Resumability / concurrency hardening (kill-server test) | 🔲 |
-| 8 | Tests, TESTING.md, final README, DECISIONS, AGENTS cleanup | 🔲 |
+| 7 | Hardening: sidebar lock, completed-project view, retry auto-advance, remove mocks, drop art_style from creation | ✅ Done |
+| 8 | Tests, TESTING.md, final README, DECISIONS, AGENTS cleanup | ✅ Done |
 
-**Current position: Phase 6 complete. Next: Phase 7 — hardening.**
+**Current position: Phase 8 complete. All implementation and verification goals met.**
+
+### Phase 8 changes (testing)
+- **Backend tests** (`backend/tests/`) — implemented using `bun:test`:
+  - `stateMachine.test.ts` — validates pending → running → done transitions, concurrency locks, step order dependency checks, retry isolation, and stuck step timeout overrides. Uses isolated fresh in-memory SQLite instances.
+  - `caps.test.ts` — validates that character results are capped to 2 and chapter results are capped to 1 before being written to the database.
+- **Frontend tests** (`frontend/tests/`) — implemented using Vitest + React Testing Library:
+  - `StepButton.test.tsx` — validates all four button states (pending, running/loading, done, failed) and ensures they function/lock as expected.
+  - `ProjectList.test.tsx` — validates that the page correctly renders an empty state with a "New Project" call-to-action when given an empty list.
+- **Test execution** — verified all tests pass: `bun test` in backend (7/7 pass) and `bun run test` (via Vitest) in frontend (6/6 pass). Details documented in `TESTING.md`.
+
+### Phase 7 changes (hardening)
+- **Sidebar lock** — step buttons disabled + lock icon shown when previous step is not `'done'`; `isStepDisabled()` already existed, now applied to sidebar `<button disabled>` with `cursor-not-allowed` and `opacity-50`.
+- **Completed project gallery** — when `project.status === 'done'`, `ProjectDetail` renders a dedicated gallery view (characters + portraits, chapters + illustrations, full manuscript) instead of the stepper UI.
+- **Retry auto-advances** — `useRetryStep.onSuccess` now immediately calls `stepsService.run()` on the same step after the retry endpoint resets it to `pending`, so the user never needs to manually click Run after a retry (implements D-009).
+- **Continue button D-009 gate** — `continueBtn` for portraits/illustrations now checks that every character/chapter item has `status === 'done'` before rendering; hidden if any item is still `'failed'` or `'running'`.
+- **Removed all mocks** — `GEMINI_IMAGE_MOCK` env var deleted, `IS_MOCK` constant and all mock helper functions removed from `image-chain.ts`. Both `runPortraitStep` and `runIllustrationStep` now make real Gemini API calls only.
+- **Removed `art_style` from project creation** — dropped from `migrate.ts` DDL, `schema.ts` `ProjectRow`, `queries/projects.ts` `insertProject`, `routes/projects.ts` POST handler, and `routes/steps.ts` style-step handler. The `art_style` column no longer exists in new databases; existing `app.db` must be deleted and re-created.
 
 ---
 
