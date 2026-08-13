@@ -83,7 +83,7 @@ router.post("/style", async (req, res) => {
     const bookText = await readBookText(project.book_text_path);
     if (!bookText) throw new Error("book.txt not found on disk");
 
-    const artStyleHint = ((req.body as { style?: string }).style ?? project.art_style) ?? null;
+    const artStyleHint = (req.body as { style?: string }).style ?? null;
 
     const { interactionId, styleText } = await runStyleStep(bookText, artStyleHint);
     upsertStyleResult(project.id, styleText);
@@ -182,8 +182,12 @@ router.post("/portraits", async (req, res) => {
 
     const characters = listCharactersByProject(project.id);
     let lastInteractionId: string | null = state.image_interaction_id;
+    let anyFailed = false;
 
     for (const character of characters) {
+      if (character.status === "done") {
+        continue;
+      }
       try {
         const { interactionId, imageBase64, mimeType } = await runPortraitStep(
           styleResult.style_text,
@@ -200,9 +204,21 @@ router.post("/portraits", async (req, res) => {
         );
         updateCharacterPortrait(character.id, imgPath);
         lastInteractionId = interactionId;
-      } catch {
+      } catch (err) {
+        console.error(`[step:portraits] Failed for character ${character.name}`, err);
         markCharacterFailed(character.id);
+        anyFailed = true;
       }
+    }
+
+    if (anyFailed) {
+      markStepFailed(project.id, "step_portraits");
+      res.status(500).json({
+        error: "Some character portraits failed to generate",
+        characters: listCharactersByProject(project.id),
+        pipeline_state: getPipelineState(project.id),
+      });
+      return;
     }
 
     markStepDone(project.id, "step_portraits", "image_interaction_id", lastInteractionId ?? "");
@@ -298,8 +314,12 @@ router.post("/illustrations", async (req, res) => {
 
     const chapters = listChaptersByProject(project.id);
     let lastInteractionId: string | null = state.image_interaction_id;
+    let anyFailed = false;
 
     for (const chapter of chapters) {
+      if (chapter.status === "done") {
+        continue;
+      }
       try {
         const { interactionId, imageBase64, mimeType } = await runIllustrationStep(
           styleResult.style_text,
@@ -316,9 +336,21 @@ router.post("/illustrations", async (req, res) => {
         );
         updateChapterIllustration(chapter.id, imgPath);
         lastInteractionId = interactionId;
-      } catch {
+      } catch (err) {
+        console.error(`[step:illustrations] Failed for chapter ${chapter.name}`, err);
         markChapterFailed(chapter.id);
+        anyFailed = true;
       }
+    }
+
+    if (anyFailed) {
+      markStepFailed(project.id, "step_illustrations");
+      res.status(500).json({
+        error: "Some chapter illustrations failed to generate",
+        chapters: listChaptersByProject(project.id),
+        pipeline_state: getPipelineState(project.id),
+      });
+      return;
     }
 
     markStepDone(project.id, "step_illustrations", "image_interaction_id", lastInteractionId ?? "");

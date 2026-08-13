@@ -1,9 +1,10 @@
 // src/pages/projects/detail.tsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useProject } from '../../hooks/useProject';
 import { useRunStep, useRetryStep } from '../../hooks/useSteps';
 import type { StepName, StepStatus, PipelineState } from '../../types/pipeline';
 import { STEP_ORDER } from '../../types/pipeline';
+import { StepButton } from '../../components/StepButton';
 
 interface ProjectDetailProps {
   projectId: string;
@@ -16,12 +17,23 @@ export default function ProjectDetail({ projectId, onGoBack }: ProjectDetailProp
   const retryStepMutation = useRetryStep(projectId);
   // True while any mutation is in-flight — blocks double-fire on any button
   const isMutating = runStepMutation.isPending || retryStepMutation.isPending;
-  
+
   // UI states
   const [activeStepTab, setActiveStepTab] = useState<StepName>('style');
   const [showSidebar, setShowSidebar] = useState(true);
   const [showContextModal, setShowContextModal] = useState(false);
   const [customStyleText, setCustomStyleText] = useState('');
+  const [hasAutoNavigated, setHasAutoNavigated] = useState(false);
+
+  // On first load, jump to the first non-done step instead of always showing 'style'
+  useEffect(() => {
+    if (!project?.pipeline_state || hasAutoNavigated) return;
+    for (const s of STEP_ORDER) {
+      const st = project.pipeline_state[`step_${s}` as keyof PipelineState] as StepStatus;
+      if (st !== 'done') { setActiveStepTab(s); break; }
+    }
+    setHasAutoNavigated(true);
+  }, [project?.pipeline_state, hasAutoNavigated]);
 
   if (isLoading) {
     return (
@@ -91,6 +103,35 @@ export default function ProjectDetail({ projectId, onGoBack }: ProjectDetailProp
     return 'illustrations';
   };
 
+  // Returns the next step after the given one, or null if at the end
+  const getNextStep = (step: StepName): StepName | null => {
+    const idx = STEP_ORDER.indexOf(step);
+    return idx < STEP_ORDER.length - 1 ? STEP_ORDER[idx + 1] : null;
+  };
+
+  // Continue button — D-009: gated on ALL items in step being done
+  const continueBtn = (step: StepName) => {
+    const next = getNextStep(step);
+    if (!next) return null;
+    if (step === 'portraits') {
+      const allDone = project.characters.length > 0 && project.characters.every((c) => c.status === 'done');
+      if (!allDone) return null;
+    }
+    if (step === 'illustrations') {
+      const allDone = project.chapters.length > 0 && project.chapters.every((c) => c.status === 'done');
+      if (!allDone) return null;
+    }
+    return (
+      <button
+        onClick={() => setActiveStepTab(next)}
+        className="w-fit mt-2 border border-ink/15 hover:border-ochre hover:text-ochre text-ink/70 font-sans text-xs font-semibold px-5 py-2.5 rounded transition-colors flex items-center gap-1.5"
+      >
+        Continue to {getStepLabel(next)}
+        <svg className="w-3 h-3 stroke-current fill-none stroke-[2.5]" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" /></svg>
+      </button>
+    );
+  };
+
   const isStepDisabled = (step: StepName): boolean => {
     const idx = STEP_ORDER.indexOf(step);
     if (idx === 0) return false;
@@ -112,7 +153,7 @@ export default function ProjectDetail({ projectId, onGoBack }: ProjectDetailProp
       );
     }
 
-    if (status === 'failed') {
+    if (status === 'failed' && (step === 'style' || step === 'characters' || step === 'chapters')) {
       return (
         <div className="p-8 border border-rust/30 bg-rust/5 rounded-lg flex flex-col items-start gap-4">
           <div>
@@ -140,6 +181,7 @@ export default function ProjectDetail({ projectId, onGoBack }: ProjectDetailProp
         return (
           <div className="flex flex-col gap-6">
             {status === 'done' ? (
+              <>
               <div className="bg-sage/20 border border-ink/10 p-6 rounded-lg">
                 <div className="flex items-center gap-2 mb-3">
                   <svg className="w-4 h-4 stroke-moss fill-none stroke-[2]" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -149,6 +191,8 @@ export default function ProjectDetail({ projectId, onGoBack }: ProjectDetailProp
                   "{project.style}"
                 </p>
               </div>
+              {continueBtn('style')}
+              </>
             ) : status === 'pending' ? (
               <div className="border border-ink/10 p-6 rounded-lg bg-sage/5 flex flex-col gap-4">
                 <p className="font-sans text-sm text-ink/65">
@@ -167,13 +211,14 @@ export default function ProjectDetail({ projectId, onGoBack }: ProjectDetailProp
                     className="px-3 py-2 bg-paper border border-ink/20 rounded font-sans text-sm placeholder:text-ink/30 text-ink focus:outline-none focus:border-ochre disabled:opacity-50"
                   />
                 </div>
-                <button
-                  onClick={() => handleRunStep('style')}
-                  disabled={isStepDisabled('style') || isMutating}
-                  className="w-fit bg-ink hover:bg-ink/90 text-paper font-sans text-xs font-bold px-5 py-2.5 rounded disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  {isMutating ? <><div className="w-3 h-3 border border-paper border-t-transparent rounded-full animate-spin" /> Processing...</> : 'Process Style'}
-                </button>
+                <StepButton
+                  status={status}
+                  isMutating={isMutating}
+                  disabled={isStepDisabled('style')}
+                  onRun={() => handleRunStep('style')}
+                  onRetry={() => handleRetryStep('style')}
+                  runLabel="Process Style"
+                />
               </div>
             ) : null}
           </div>
@@ -184,30 +229,37 @@ export default function ProjectDetail({ projectId, onGoBack }: ProjectDetailProp
           <div className="flex flex-col gap-6">
             {status === 'done' ? (
               project.characters.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {project.characters.map((char) => (
-                    <div key={char.id} className="bg-sage/20 border border-ink/10 p-6 rounded-lg flex flex-col gap-2">
-                      <span className="font-sans text-[10px] uppercase font-bold tracking-widest text-ochre">Subject Profile</span>
-                      <h4 className="font-serif text-xl font-medium text-ink">{char.name}</h4>
-                      <p className="font-sans text-xs text-ink/65 leading-relaxed">{char.prompt}</p>
-                    </div>
-                  ))}
-                </div>
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {project.characters.map((char) => (
+                      <div key={char.id} className="bg-sage/20 border border-ink/10 p-6 rounded-lg flex flex-col gap-2">
+                        <span className="font-sans text-[10px] uppercase font-bold tracking-widest text-ochre">Subject Profile</span>
+                        <h4 className="font-serif text-xl font-medium text-ink">{char.name}</h4>
+                        <p className="font-sans text-xs text-ink/65 leading-relaxed">{char.prompt}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {continueBtn('characters')}
+                </>
               ) : (
-                <div className="p-6 border border-moss/20 bg-moss/5 rounded-lg font-sans text-sm text-ink/60">
-                  Step completed — no character profiles were identified in the manuscript.
-                </div>
+                <>
+                  <div className="p-6 border border-moss/20 bg-moss/5 rounded-lg font-sans text-sm text-ink/60">
+                    Step completed — no character profiles were identified in the manuscript.
+                  </div>
+                  {continueBtn('characters')}
+                </>
               )
             ) : status === 'pending' ? (
               <div className="border border-ink/10 p-6 rounded-lg bg-sage/5 flex flex-col gap-4">
                 <p className="font-sans text-sm text-ink/65">Identify and define the key subjects from the manuscript.</p>
-                <button
-                  onClick={() => handleRunStep('characters')}
-                  disabled={isStepDisabled('characters') || isMutating}
-                  className="w-fit bg-ink hover:bg-ink/90 text-paper font-sans text-xs font-bold px-5 py-2.5 rounded disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  {isMutating ? <><div className="w-3 h-3 border border-paper border-t-transparent rounded-full animate-spin" /> Processing...</> : 'Identify Characters'}
-                </button>
+                <StepButton
+                  status={status}
+                  isMutating={isMutating}
+                  disabled={isStepDisabled('characters')}
+                  onRun={() => handleRunStep('characters')}
+                  onRetry={() => handleRetryStep('characters')}
+                  runLabel="Identify Characters"
+                />
               </div>
             ) : null}
           </div>
@@ -216,60 +268,80 @@ export default function ProjectDetail({ projectId, onGoBack }: ProjectDetailProp
       case 'portraits':
         return (
           <div className="flex flex-col gap-6">
-            {status === 'done' && project.characters.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {project.characters.map((char) => {
-                  const isCharDone = char.status === 'done' && char.portrait_path;
-                  return (
-                    <div key={char.id} className="bg-sage/20 border border-ink/10 p-5 rounded-lg flex flex-col gap-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h4 className="font-serif text-lg font-medium text-ink">{char.name}</h4>
-                          <span className="font-sans text-[10px] text-ink/50 uppercase tracking-wide">Character Subject</span>
-                        </div>
-                        <span className={`font-sans text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 border rounded-sm ${
-                          isCharDone ? 'bg-moss/10 border-moss/30 text-moss' : 'bg-ochre/10 border-ochre/30 text-ochre'
-                        }`}>
-                          {isCharDone ? 'Render Complete' : 'Pending Render'}
-                        </span>
-                      </div>
-
-                      {/* Portrait Container */}
-                      <div className="aspect-square w-full border border-ink/10 rounded bg-paper/60 flex items-center justify-center overflow-hidden">
-                        {isCharDone ? (
-                          <img
-                            src={`/${char.portrait_path}`}
-                            alt={char.name}
-                            className="w-full h-full object-cover select-none"
-                          />
-                        ) : (
-                          <div className="flex flex-col items-center justify-center text-center p-6 text-ink/35">
-                            <svg className="w-8 h-8 stroke-current fill-none stroke-[1.2] mb-1.5" viewBox="0 0 24 24">
-                              <circle cx="12" cy="10" r="4" />
-                              <path d="M6 21v-1a4 4 0 014-4h4a4 4 0 014 4v1" />
-                            </svg>
-                            <span className="font-sans text-xs">Awaiting Rendering</span>
+            {(status === 'done' || status === 'failed') && project.characters.length > 0 ? (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {project.characters.map((char) => {
+                    const isCharDone = char.status === 'done' && char.portrait_path;
+                    const isCharFailed = char.status === 'failed';
+                    return (
+                      <div key={char.id} className="bg-sage/20 border border-ink/10 p-5 rounded-lg flex flex-col gap-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h4 className="font-serif text-lg font-medium text-ink">{char.name}</h4>
+                            <span className="font-sans text-[10px] text-ink/50 uppercase tracking-wide">Character Subject</span>
                           </div>
+                          <span className={`font-sans text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 border rounded-sm ${
+                            isCharDone ? 'bg-moss/10 border-moss/30 text-moss'
+                            : isCharFailed ? 'bg-rust/10 border-rust/30 text-rust'
+                            : 'bg-ochre/10 border-ochre/30 text-ochre'
+                          }`}>
+                            {isCharDone ? 'Render Complete' : isCharFailed ? 'Render Failed' : 'Pending Render'}
+                          </span>
+                        </div>
+
+                        <div className="aspect-square w-full border border-ink/10 rounded bg-paper/60 flex items-center justify-center overflow-hidden">
+                          {isCharDone ? (
+                            <img
+                              src={`/${char.portrait_path}`}
+                              alt={char.name}
+                              className="w-full h-full object-cover select-none"
+                            />
+                          ) : isCharFailed ? (
+                            <div className="flex flex-col items-center justify-center text-center p-6 text-rust/60">
+                              <svg className="w-8 h-8 stroke-current fill-none stroke-[1.2] mb-1.5" viewBox="0 0 24 24"><path d="M12 9v3.75m0 3.75h.007M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                              <span className="font-sans text-xs">Portrait generation failed</span>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center justify-center text-center p-6 text-ink/35">
+                              <svg className="w-8 h-8 stroke-current fill-none stroke-[1.2] mb-1.5" viewBox="0 0 24 24">
+                                <circle cx="12" cy="10" r="4" />
+                                <path d="M6 21v-1a4 4 0 014-4h4a4 4 0 014 4v1" />
+                              </svg>
+                              <span className="font-sans text-xs">Awaiting Rendering</span>
+                            </div>
+                          )}
+                        </div>
+
+                        <p className="font-sans text-xs text-ink/60 line-clamp-2 italic">
+                          "{char.prompt}"
+                        </p>
+                        {isCharFailed && (
+                          <button
+                            onClick={() => handleRetryStep('portraits')}
+                            disabled={isMutating}
+                            className="w-fit text-[10px] font-sans font-semibold px-3 py-1.5 border border-rust/30 text-rust hover:bg-rust/5 rounded transition-colors disabled:opacity-50"
+                          >
+                            {isMutating ? 'Retrying...' : '↺ Retry Portraits'}
+                          </button>
                         )}
                       </div>
-
-                      <p className="font-sans text-xs text-ink/60 line-clamp-2 italic">
-                        "{char.prompt}"
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+                {continueBtn('portraits')}
+              </>
             ) : status === 'pending' ? (
               <div className="border border-ink/10 p-6 rounded-lg bg-sage/5 flex flex-col gap-4">
                 <p className="font-sans text-sm text-ink/65">Generate portrait sketches from the identified character profiles.</p>
-                <button
-                  onClick={() => handleRunStep('portraits')}
-                  disabled={isStepDisabled('portraits') || isMutating}
-                  className="w-fit bg-ink hover:bg-ink/90 text-paper font-sans text-xs font-bold px-5 py-2.5 rounded disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  {isMutating ? <><div className="w-3 h-3 border border-paper border-t-transparent rounded-full animate-spin" /> Processing...</> : 'Process Portraits'}
-                </button>
+                <StepButton
+                  status={status}
+                  isMutating={isMutating}
+                  disabled={isStepDisabled('portraits')}
+                  onRun={() => handleRunStep('portraits')}
+                  onRetry={() => handleRetryStep('portraits')}
+                  runLabel="Process Portraits"
+                />
               </div>
             ) : null}
           </div>
@@ -280,26 +352,33 @@ export default function ProjectDetail({ projectId, onGoBack }: ProjectDetailProp
           <div className="flex flex-col gap-6">
             {status === 'done' ? (
               project.chapters.length > 0 ? (
-                <div className="bg-sage/20 border border-ink/10 p-6 rounded-lg flex flex-col gap-2">
-                  <span className="font-sans text-[10px] uppercase font-bold tracking-widest text-ochre">Thematic Chapter Scene</span>
-                  <h4 className="font-serif text-xl font-medium text-ink">{project.chapters[0].name}</h4>
-                  <p className="font-sans text-xs text-ink/65 leading-relaxed">{project.chapters[0].prompt}</p>
-                </div>
+                <>
+                  <div className="bg-sage/20 border border-ink/10 p-6 rounded-lg flex flex-col gap-2">
+                    <span className="font-sans text-[10px] uppercase font-bold tracking-widest text-ochre">Thematic Chapter Scene</span>
+                    <h4 className="font-serif text-xl font-medium text-ink">{project.chapters[0].name}</h4>
+                    <p className="font-sans text-xs text-ink/65 leading-relaxed">{project.chapters[0].prompt}</p>
+                  </div>
+                  {continueBtn('chapters')}
+                </>
               ) : (
-                <div className="p-6 border border-moss/20 bg-moss/5 rounded-lg font-sans text-sm text-ink/60">
-                  Step completed — no chapter scenes were identified.
-                </div>
+                <>
+                  <div className="p-6 border border-moss/20 bg-moss/5 rounded-lg font-sans text-sm text-ink/60">
+                    Step completed — no chapter scenes were identified.
+                  </div>
+                  {continueBtn('chapters')}
+                </>
               )
             ) : status === 'pending' ? (
               <div className="border border-ink/10 p-6 rounded-lg bg-sage/5 flex flex-col gap-4">
                 <p className="font-sans text-sm text-ink/65">Identify the most visually dramatic chapter scene for illustration.</p>
-                <button
-                  onClick={() => handleRunStep('chapters')}
-                  disabled={isStepDisabled('chapters') || isMutating}
-                  className="w-fit bg-ink hover:bg-ink/90 text-paper font-sans text-xs font-bold px-5 py-2.5 rounded disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  {isMutating ? <><div className="w-3 h-3 border border-paper border-t-transparent rounded-full animate-spin" /> Processing...</> : 'Identify Chapter Scene'}
-                </button>
+                <StepButton
+                  status={status}
+                  isMutating={isMutating}
+                  disabled={isStepDisabled('chapters')}
+                  onRun={() => handleRunStep('chapters')}
+                  onRetry={() => handleRetryStep('chapters')}
+                  runLabel="Identify Chapter Scene"
+                />
               </div>
             ) : null}
           </div>
@@ -308,10 +387,11 @@ export default function ProjectDetail({ projectId, onGoBack }: ProjectDetailProp
       case 'illustrations':
         return (
           <div className="flex flex-col gap-6">
-            {status === 'done' && project.chapters.length > 0 ? (
+            {(status === 'done' || status === 'failed') && project.chapters.length > 0 ? (
               <div className="grid grid-cols-1 gap-6">
                 {project.chapters.map((ch) => {
                   const isChDone = ch.status === 'done' && ch.illustration_path;
+                  const isChFailed = ch.status === 'failed';
                   return (
                     <div key={ch.id} className="bg-sage/20 border border-ink/10 p-5 rounded-lg flex flex-col gap-4">
                       <div className="flex items-center justify-between">
@@ -320,9 +400,11 @@ export default function ProjectDetail({ projectId, onGoBack }: ProjectDetailProp
                           <span className="font-sans text-[10px] text-ink/50 uppercase tracking-wide">Scene Specimen</span>
                         </div>
                         <span className={`font-sans text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 border rounded-sm ${
-                          isChDone ? 'bg-moss/10 border-moss/30 text-moss' : 'bg-ochre/10 border-ochre/30 text-ochre'
+                          isChDone ? 'bg-moss/10 border-moss/30 text-moss'
+                          : isChFailed ? 'bg-rust/10 border-rust/30 text-rust'
+                          : 'bg-ochre/10 border-ochre/30 text-ochre'
                         }`}>
-                          {isChDone ? 'Render Complete' : 'Pending Render'}
+                          {isChDone ? 'Render Complete' : isChFailed ? 'Render Failed' : 'Pending Render'}
                         </span>
                       </div>
 
@@ -334,6 +416,11 @@ export default function ProjectDetail({ projectId, onGoBack }: ProjectDetailProp
                             alt={ch.name}
                             className="w-full h-full object-cover select-none"
                           />
+                        ) : isChFailed ? (
+                          <div className="flex flex-col items-center justify-center text-center p-6 text-rust/60">
+                            <svg className="w-8 h-8 stroke-current fill-none stroke-[1.2] mb-1.5" viewBox="0 0 24 24"><path d="M12 9v3.75m0 3.75h.007M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            <span className="font-sans text-xs">Illustration generation failed</span>
+                          </div>
                         ) : (
                           <div className="flex flex-col items-center justify-center text-center p-6 text-ink/35">
                             <svg className="w-8 h-8 stroke-current fill-none stroke-[1.2] mb-1.5" viewBox="0 0 24 24">
@@ -347,6 +434,16 @@ export default function ProjectDetail({ projectId, onGoBack }: ProjectDetailProp
                       <p className="font-sans text-xs text-ink/60 line-clamp-2 italic">
                         "{ch.prompt}"
                       </p>
+
+                      {isChFailed && (
+                        <button
+                          onClick={() => handleRetryStep('illustrations')}
+                          disabled={isMutating}
+                          className="w-fit text-[10px] font-sans font-semibold px-3 py-1.5 border border-rust/30 text-rust hover:bg-rust/5 rounded transition-colors disabled:opacity-50"
+                        >
+                          {isMutating ? 'Retrying...' : '↺ Retry Illustrations'}
+                        </button>
+                      )}
                     </div>
                   );
                 })}
@@ -354,19 +451,75 @@ export default function ProjectDetail({ projectId, onGoBack }: ProjectDetailProp
             ) : status === 'pending' ? (
               <div className="border border-ink/10 p-6 rounded-lg bg-sage/5 flex flex-col gap-4">
                 <p className="font-sans text-sm text-ink/65">Generate landscape art for the selected chapter scene.</p>
-                <button
-                  onClick={() => handleRunStep('illustrations')}
-                  disabled={isStepDisabled('illustrations') || isMutating}
-                  className="w-fit bg-ink hover:bg-ink/90 text-paper font-sans text-xs font-bold px-5 py-2.5 rounded disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  {isMutating ? <><div className="w-3 h-3 border border-paper border-t-transparent rounded-full animate-spin" /> Processing...</> : 'Generate Illustrations'}
-                </button>
+                <StepButton
+                  status={status}
+                  isMutating={isMutating}
+                  disabled={isStepDisabled('illustrations')}
+                  onRun={() => handleRunStep('illustrations')}
+                  onRetry={() => handleRetryStep('illustrations')}
+                  runLabel="Generate Illustrations"
+                />
               </div>
             ) : null}
           </div>
         );
     }
   };
+
+  // Completed project gallery view
+  if (project.status === 'done') {
+    return (
+      <div className="flex-1 bg-paper min-h-screen flex flex-col">
+        <div className="px-8 py-3.5 border-b border-ink/10 flex items-center justify-between bg-sage/10 text-xs font-sans">
+          <div className="flex items-center gap-2">
+            <button onClick={onGoBack} className="text-ink/60 hover:text-ink">← Notebooks</button>
+            <span className="text-ink/20">/</span>
+            <span className="text-ink font-semibold truncate max-w-[200px]">{project.title}</span>
+          </div>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-moss bg-moss/10 border border-moss/30 px-2.5 py-1 rounded-sm">✓ Complete</span>
+        </div>
+        <main className="flex-1 p-8 md:p-12 flex flex-col gap-10">
+          <div>
+            <p className="font-sans text-[10px] uppercase tracking-widest text-ink/40">Illustrated Manuscript</p>
+            <h2 className="font-serif text-4xl font-medium text-ink">{project.title}</h2>
+            {project.style && <p className="font-serif text-base italic text-ink/60 mt-2 max-w-2xl leading-relaxed">"{project.style}"</p>}
+          </div>
+          {project.characters.length > 0 && (
+            <section className="flex flex-col gap-4">
+              <div className="flex items-center gap-3"><h3 className="font-serif text-2xl font-medium text-ink">Characters</h3><div className="flex-1 h-px bg-ink/10" /></div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {project.characters.map((char) => (
+                  <div key={char.id} className="bg-sage/15 border border-ink/10 rounded-lg overflow-hidden">
+                    {char.portrait_path
+                      ? <img src={`/${char.portrait_path}`} alt={char.name} className="w-full aspect-square object-cover" />
+                      : <div className="w-full aspect-square bg-sage/30 flex items-center justify-center text-ink/30 font-serif italic text-sm">No portrait</div>}
+                    <div className="p-4"><h4 className="font-serif text-lg font-medium text-ink">{char.name}</h4><p className="font-sans text-xs text-ink/60 mt-1">{char.prompt}</p></div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+          {project.chapters.length > 0 && (
+            <section className="flex flex-col gap-4">
+              <div className="flex items-center gap-3"><h3 className="font-serif text-2xl font-medium text-ink">Chapter Illustration</h3><div className="flex-1 h-px bg-ink/10" /></div>
+              {project.chapters.map((ch) => (
+                <div key={ch.id} className="bg-sage/15 border border-ink/10 rounded-lg overflow-hidden">
+                  {ch.illustration_path
+                    ? <img src={`/${ch.illustration_path}`} alt={ch.name} className="w-full aspect-video object-cover" />
+                    : <div className="w-full aspect-video bg-sage/30 flex items-center justify-center text-ink/30 font-serif italic text-sm">No illustration</div>}
+                  <div className="p-5"><span className="font-sans text-[10px] uppercase tracking-widest text-ochre font-bold">Scene</span><h4 className="font-serif text-xl font-medium text-ink">{ch.name}</h4><p className="font-sans text-xs text-ink/60 mt-1">{ch.prompt}</p></div>
+                </div>
+              ))}
+            </section>
+          )}
+          <section className="flex flex-col gap-4">
+            <div className="flex items-center gap-3"><h3 className="font-serif text-2xl font-medium text-ink">Manuscript</h3><div className="flex-1 h-px bg-ink/10" /></div>
+            <div className="bg-sage/10 border border-ink/10 rounded-lg p-6 font-serif text-sm text-ink/80 leading-relaxed whitespace-pre-wrap max-h-80 overflow-y-auto">{project.book_text || 'No content.'}</div>
+          </section>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 bg-paper min-h-screen flex flex-col">
@@ -384,14 +537,6 @@ export default function ProjectDetail({ projectId, onGoBack }: ProjectDetailProp
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Layout Toggle */}
-          <button
-            onClick={() => setShowSidebar(!showSidebar)}
-            className="border border-ink/15 hover:bg-ink/5 px-2.5 py-1 rounded text-ink/80 transition-colors cursor-pointer"
-          >
-            {showSidebar ? 'Hide Sidebar' : 'Show Sidebar'}
-          </button>
-
           {/* Context Modal Trigger */}
           <button
             onClick={() => setShowContextModal(true)}
@@ -420,41 +565,37 @@ export default function ProjectDetail({ projectId, onGoBack }: ProjectDetailProp
               {STEP_ORDER.map((step) => {
                 const status = getStepStatus(step);
                 const isActive = activeStepTab === step;
-                
-                // Color configuration:
-                // done = Moss, current active = Ochre, future = Sage/gray
+                const locked = isStepDisabled(step);
+
                 let badgeStyle = 'bg-ink/5 text-ink/40';
-                if (status === 'done') {
-                  badgeStyle = 'bg-moss/10 text-moss font-semibold';
-                } else if (status === 'running' || step === currentPipelineStep()) {
-                  badgeStyle = 'bg-ochre/15 text-ochre font-bold';
-                }
+                if (status === 'done') badgeStyle = 'bg-moss/10 text-moss font-semibold';
+                else if (status === 'failed') badgeStyle = 'bg-rust/10 text-rust font-semibold';
+                else if (status === 'running' || step === currentPipelineStep()) badgeStyle = 'bg-ochre/15 text-ochre font-bold';
 
                 return (
                   <button
                     key={step}
-                    onClick={() => setActiveStepTab(step)}
-                    className={`w-full text-left p-3 rounded border transition-all text-xs font-sans cursor-pointer flex items-center justify-between ${
-                      isActive
-                        ? 'border-ochre bg-ochre/10 shadow-sm'
-                        : 'border-ink/5 hover:border-ink/15 hover:bg-ink/5'
+                    onClick={() => !locked && setActiveStepTab(step)}
+                    disabled={locked}
+                    title={locked ? 'Complete the previous step first' : undefined}
+                    className={`w-full text-left p-3 rounded border transition-all text-xs font-sans flex items-center justify-between ${
+                      locked
+                        ? 'border-ink/5 text-ink/30 cursor-not-allowed opacity-50'
+                        : isActive
+                        ? 'border-ochre bg-ochre/10 shadow-sm cursor-pointer'
+                        : 'border-ink/5 hover:border-ink/15 hover:bg-ink/5 cursor-pointer'
                     }`}
                   >
                     <div className="flex flex-col">
-                      <span className={`font-semibold ${isActive ? 'text-ink' : 'text-ink/80'}`}>
+                      <span className={`font-semibold flex items-center gap-1 ${locked ? 'text-ink/30' : isActive ? 'text-ink' : 'text-ink/80'}`}>
+                        {locked && (
+                          <svg className="w-2.5 h-2.5 fill-current shrink-0" viewBox="0 0 24 24"><path d="M17 11V7A5 5 0 0 0 7 7v4H5v11h14V11h-2zm-6 6.732V16a1 1 0 1 1 2 0v1.732a1 1 0 1 1-2 0zM15 11H9V7a3 3 0 1 1 6 0v4z"/></svg>
+                        )}
                         {getStepLabel(step)}
                       </span>
-                      {status === 'running' && (
-                        <span className="text-[9px] text-ochre font-medium animate-pulse mt-0.5">
-                          Generating visuals
-                        </span>
-                      )}
+                      {status === 'running' && <span className="text-[9px] text-ochre font-medium animate-pulse mt-0.5">Generating...</span>}
                     </div>
-
-                    {/* Badge Indicator */}
-                    <span className={`text-[9px] uppercase px-1.5 py-0.5 rounded-sm font-semibold ${badgeStyle}`}>
-                      {status}
-                    </span>
+                    <span className={`text-[9px] uppercase px-1.5 py-0.5 rounded-sm font-semibold ${badgeStyle}`}>{status}</span>
                   </button>
                 );
               })}
@@ -511,6 +652,19 @@ export default function ProjectDetail({ projectId, onGoBack }: ProjectDetailProp
               {getStepDescription(activeStepTab)}
             </p>
           </div>
+
+          {/* Mutation error notification */}
+          {(runStepMutation.isError || retryStepMutation.isError) && (
+            <div className="p-3 border border-rust/30 bg-rust/5 rounded-lg font-sans text-xs text-rust flex items-start gap-2">
+              <svg className="w-4 h-4 stroke-current fill-none stroke-[2] shrink-0 mt-0.5" viewBox="0 0 24 24">
+                <path d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+              </svg>
+              <span>
+                {(((runStepMutation.error || retryStepMutation.error) as any)?.response?.data?.error)
+                  ?? 'Step execution failed. Please retry or check the backend logs.'}
+              </span>
+            </div>
+          )}
 
           {/* Render Step Action/Result UI */}
           <div className="mt-2">

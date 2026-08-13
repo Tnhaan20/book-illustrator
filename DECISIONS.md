@@ -99,7 +99,7 @@ Loses the Files API's token-caching benefit for very long books — inline text 
 **Status:** decided
 
 ### Problem
-The frontend needed a distinct visual concept — a naturalist's field notebook, blending scientific precision with archival texture — plus a defined palette, typography, component states, and two stepper layouts (with/without sidebar).
+The frontend needed a distinct visual concept — a naturalist's field notebook, blending scientific precision with archival texture — plus a defined palette, typography, component states, and two stepper layouts (with/without sidebar). So I decided to use Google Stitch for making the UI and the color palette for the frontend.
 
 ### Decision
 Standardize on the **Botanical Field Notebook** specification outlined in `frontend/Design.md`.
@@ -177,3 +177,19 @@ Made the button's label, enabled/disabled state, and handler all derive from the
 
 ### Cost accepted
 - One more branch of UI logic per step card instead of a single static button — small added complexity, but it's exactly the four states the backend's `pipeline_state` already tracks, so no new state had to be invented on the frontend
+
+---
+
+## D-009 · Caught Antigravity showing "Continue" even when a step's items hadn't all succeeded
+
+**Date:** 2026-08-12  
+**Status:** decided (AI override)
+
+### What happened
+Portraits and Illustrations aren't single pass/fail steps — each generates one card per item (up to 2 characters, 1 chapter), and any individual card can fail independently. I forced one portrait call to fail while testing and found the Portraits screen still showed "Continue to Chapters →" right next to the failed card's retry button — the button only checked whether the step had been attempted, not whether every item in it had actually finished. That let the pipeline advance to Chapters while a character portrait was still sitting in `'failed'`, directly contradicting §4.3's "a step cannot run before the previous ones have succeeded."
+
+### Fix
+The "Continue to next step" button is now gated on every item in the current step being `'done'` — if any character/chapter card is `'failed'` or `'running'`, only the per-card Retry button shows, and Continue is hidden entirely. It only appears once the step's items are all done. Also added the same check server-side in `tryStartStep()`, so even if a UI gate is ever bypassed or regresses, the backend independently refuses to start the next step until the previous one is fully done — not just attempted.
+
+### Cost accepted
+- The step's "done" status now has to be derived from all its items' statuses rather than a single flag — one more thing to keep in sync, but it reuses the same per-character/per-chapter `status` column already in the schema, no new state needed

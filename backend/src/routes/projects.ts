@@ -50,7 +50,7 @@ router.get("/", (req, res) => {
 });
 
 // ── POST /projects ────────────────────────────────────────────────────────────
-// Body: multipart (file) OR JSON { title, text, art_style? }
+// Body: multipart (file) OR JSON { title, text }
 // Requires header: x-user-id
 
 router.post(
@@ -82,12 +82,11 @@ router.post(
       return;
     }
 
-    const artStyle = (req.body as { art_style?: string }).art_style?.trim() ?? null;
     const projectId = crypto.randomUUID();
 
     try {
       const bookTextPath = await saveBookText(userId, projectId, bookText);
-      const project = insertProject(projectId, userId, title, bookTextPath, artStyle);
+      const project = insertProject(projectId, userId, title, bookTextPath);
       initPipelineState(projectId);
 
       res.status(201).json({

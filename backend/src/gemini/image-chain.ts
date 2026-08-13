@@ -1,12 +1,3 @@
-// src/gemini/image-chain.ts
-// Image pipeline: portrait per character → illustration per chapter
-//
-// DUAL MODE — controlled by GEMINI_IMAGE_MOCK env var:
-//   GEMINI_IMAGE_MOCK=true  → returns a real PNG (a solid-colour placeholder)
-//                             so the full save/serve flow is testable without
-//                             a paid Gemini key.
-//   GEMINI_IMAGE_MOCK=false (default) → calls gemini-3.1-flash-image via the
-//                             Interactions API with previous_interaction_id.
 
 import { ai, MODELS } from "./client.ts";
 
@@ -23,10 +14,6 @@ export interface ImageResult {
 
 // ── Mock helper ───────────────────────────────────────────────────────────────
 
-/**
- * Returns a minimal 1×1 PNG as base64.
- * Good enough to exercise the whole save/serve/DB path without any API call.
- */
 function mockImageBase64(): string {
   // 1×1 red pixel PNG (67 bytes, standard minimal PNG)
   return "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg==";

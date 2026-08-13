@@ -25,7 +25,6 @@ export function runMigrations(): void {
     // ── projects ─────────────────────────────────────────────────────────────
     // One project per uploaded book text.
     // book_text_path → relative path under backend/data/{userId}/{projectId}/
-    // art_style      → optional user hint for the image chain
     // status         → 'draft' | 'in_progress' | 'done'
     db.run(`
       CREATE TABLE IF NOT EXISTS projects (
@@ -33,7 +32,6 @@ export function runMigrations(): void {
         user_id        TEXT NOT NULL REFERENCES users(id),
         title          TEXT NOT NULL,
         book_text_path TEXT NOT NULL,
-        art_style      TEXT,
         status         TEXT NOT NULL DEFAULT 'draft'
                          CHECK (status IN ('draft', 'in_progress', 'done')),
         created_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))

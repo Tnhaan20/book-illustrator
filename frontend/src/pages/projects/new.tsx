@@ -62,7 +62,8 @@ export default function NewProject({ onSuccess, onCancel }: NewProjectProps) {
   };
 
   return (
-    <div className="flex-1 bg-paper px-12 py-10 flex flex-col min-h-screen">
+    <div className="flex-1 bg-paper flex justify-center min-h-screen px-4 py-10">
+      <div className="w-full max-w-2xl flex flex-col">
       {/* Header */}
       <div className="mb-8">
         <h2 className="font-serif text-4xl font-medium text-ink leading-tight">
@@ -74,7 +75,7 @@ export default function NewProject({ onSuccess, onCancel }: NewProjectProps) {
       </div>
 
       {/* Main Form container */}
-      <form onSubmit={handleSubmit} className="max-w-3xl w-full flex flex-col gap-6">
+      <form onSubmit={handleSubmit} className="w-full flex flex-col gap-6">
         {validationError && (
           <div className="bg-rust/10 border border-rust text-rust text-xs p-3 rounded font-sans">
             {validationError}
@@ -189,6 +190,7 @@ export default function NewProject({ onSuccess, onCancel }: NewProjectProps) {
           </button>
         </div>
       </form>
+      </div>
     </div>
   );
 }

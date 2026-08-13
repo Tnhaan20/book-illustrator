@@ -133,3 +133,30 @@ export function markStepFailed(projectId: string, field: StepField): void {
     [projectId]
   );
 }
+
+const STEP_ORDER: StepField[] = [
+  "step_style",
+  "step_characters",
+  "step_portraits",
+  "step_chapters",
+  "step_illustrations"
+];
+
+/**
+ * Validates previous step is 'done' and claims the step.
+ * Returns true if claimed.
+ */
+export function tryStartStep(projectId: string, field: StepField): boolean {
+  const state = getPipelineState(projectId);
+  if (!state) throw new Error("pipeline_state row not found");
+
+  const idx = STEP_ORDER.indexOf(field);
+  if (idx > 0) {
+    const prevField = STEP_ORDER[idx - 1];
+    if (state[prevField] !== "done") {
+      throw new Error(`Previous step ${prevField} must complete first`);
+    }
+  }
+
+  return claimStep(projectId, field);
+}

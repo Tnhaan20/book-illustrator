@@ -29,8 +29,6 @@ export interface ProjectRow {
   title: string;
   /** Relative path under backend/data/{userId}/{projectId}/book.txt */
   book_text_path: string;
-  /** Optional user-supplied style hint (e.g. "watercolour fantasy") */
-  art_style: string | null;
   status: ProjectStatus;
   created_at: string;
 }
