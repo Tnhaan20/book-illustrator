@@ -255,9 +255,9 @@ router.post("/chapters", async (req, res) => {
     return;
   }
 
-  if (state.step_characters !== "done") {
+  if (state.step_portraits !== "done") {
     markStepFailed(project.id, "step_chapters");
-    res.status(409).json({ error: "Characters step must complete before chapters" });
+    res.status(409).json({ error: "Portraits step must complete before chapters" });
     return;
   }
 

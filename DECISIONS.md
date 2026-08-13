@@ -124,7 +124,7 @@ Standardize on the **Botanical Field Notebook** specification outlined in `front
 
 ---
 
-## D-006 · Caught Project Ingestion Bounds
+## D-006 · Caught Antigravity adding a style field to project creation that didn't belong there
 
 **Date:** 2026-08-12  
 **Status:** decided (AI override)
@@ -193,3 +193,9 @@ The "Continue to next step" button is now gated on every item in the current ste
 
 ### Cost accepted
 - The step's "done" status now has to be derived from all its items' statuses rather than a single flag — one more thing to keep in sync, but it reuses the same per-character/per-chapter `status` column already in the schema, no new state needed
+
+---
+
+## 10. If You Had One More Day, What Would You Build Next and Why?
+
+I'd focus on validating the two image-generation steps (portraits, illustrations) against a live paid Gemini key — everything else in the pipeline has been verified, including a real server-crash-and-recover test (see TESTING.md §5), but image output itself remains unverified due to an unresolved billing blocker (a Vietnamese-issued Visa was rejected by Google Billing; see DECISIONS.md D-004/D-006/D-009 context). I'd also add the retry/attempt history bonus feature, since `step_started_at` already exists in the schema and makes it a small addition once image generation is confirmed working.
