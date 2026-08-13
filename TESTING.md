@@ -52,7 +52,7 @@ This document reports the testing strategy, test cases, and the real execution r
 - **Visual styling** (colors, spacing, the Botanical Field Notebook palette) — not something an automated assertion meaningfully verifies; caught by manual review instead.
 - **Real calls to the Gemini API** — every test mocks Gemini entirely. Hitting the live API from an automated suite would burn quota, cost money, and make results non-deterministic (model output varies between calls).
 - **Full end-to-end browser tests** — not required by the assessment brief (§5.4 explicitly states E2E is not expected); the state-machine and caps tests already cover the pipeline's core correctness logic without needing a real browser.
-- **The "server dies mid-call" scenario** — covered by the `stuck-threshold override` unit test (which simulates a stale timestamp), but the actual real-server-kill scenario was verified manually rather than automated, since reliably killing and restarting a live process inside a test suite adds more flakiness than value at this scope.
+- **The "server dies mid-call" scenario** — not covered by an automated test (reliably killing and restarting a live process inside a test suite adds more flakiness than value at this scope), but manually verified end-to-end with a real crash simulation — see §5 below for the full log.
 
 ---
 
@@ -100,3 +100,23 @@ $ vitest run
    Start at  10:19:00
    Duration  2.18s (transform 133ms, setup 540ms, import 241ms, tests 214ms, environment 2.61s)
 ```
+
+---
+
+## 5. Manual Verification: Server Crash Mid-Call
+
+Automated tests simulate a stuck step by injecting a stale timestamp; this section documents a real crash-and-recover run against the live server, to confirm the actual system (not just the isolated function) behaves correctly.
+
+**Method:** Temporarily added a 15-second delay in `gemini/client.ts` right before the Gemini call, and temporarily lowered the stuck-step threshold to 5 seconds for faster iteration. Both were reverted before the final test run above.
+
+| Step | Result |
+|---|---|
+| Started style step on a fresh project | Step marked `'running'`, entered the 15s delay |
+| Killed the backend process mid-delay | Client connection dropped instantly; no response ever returned |
+| Inspected DB after kill | `step_style: "running"`, `step_started_at` preserved — no data loss, no silent state change |
+| Restarted backend | Project and its stuck state loaded correctly, unchanged |
+| Called retry after the threshold elapsed | Retry succeeded, step re-claimed as `'running'` with a fresh `step_started_at` |
+| Let the retried call complete | Step successfully transitioned to `'done'` |
+| Reverted the temporary delay and threshold | Confirmed by re-running the full test suite — still 7/7 backend, 6/6 frontend passing (see §4) |
+
+This confirms the concurrency guard (`tryStartStep`) behaves correctly not just in isolated unit tests, but against a real process kill and restart — no manual DB surgery was needed to recover the stuck step.
