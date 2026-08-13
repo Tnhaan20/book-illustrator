@@ -58,7 +58,7 @@ export function StepButton({
     <button
       onClick={onRun}
       disabled={disabled || isLoading}
-      className="bg-ink hover:bg-ink/90 text-paper font-sans text-xs font-bold px-5 py-2.5 rounded disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer"
+      className="w-fit bg-ink hover:bg-ink/90 text-paper font-sans text-xs font-bold px-5 py-2.5 rounded disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer"
       data-testid="step-run-button"
     >
       {isLoading ? (

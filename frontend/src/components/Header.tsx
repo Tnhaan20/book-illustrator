@@ -20,7 +20,7 @@ export default function Header({ onGoHome }: HeaderProps) {
       <div className="flex items-center gap-4">
         {user && (
           <span className="font-sans text-xs text-ink/65 italic">
-            Journal of {user.name}
+            Journal of "{user.name}"
           </span>
         )}
         <button
