@@ -2,8 +2,10 @@
 
 import { GoogleGenAI } from "@google/genai";
 
-const apiKey = process.env.GEMINI_API_KEY;
-if (!apiKey) throw new Error("GEMINI_API_KEY is not set in environment");
+const apiKey = process.env.GEMINI_API_KEY || "mock-key-for-testing";
+if (process.env.NODE_ENV !== "test" && !process.env.GEMINI_API_KEY) {
+  throw new Error("GEMINI_API_KEY is not set in environment");
+}
 
 export const ai = new GoogleGenAI({ apiKey });
 
