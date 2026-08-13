@@ -122,7 +122,7 @@ describe("State Machine - Pipeline State Transitions", () => {
 
     const stateRetried = getPipelineState(projectId);
     expect(stateRetried?.step_style).toBe("done");
-    expect(stateRetried?.step_characters).toBe("running");
+    expect(stateRetried?.step_characters).toBe("pending");
     expect(stateRetried?.step_portraits).toBe("pending");
   });
 
@@ -145,6 +145,6 @@ describe("State Machine - Pipeline State Transitions", () => {
     expect(retried).toBe(true);
 
     const state = getPipelineState(projectId);
-    expect(state?.step_style).toBe("running");
+    expect(state?.step_style).toBe("pending");
   });
 });

@@ -6,6 +6,9 @@ import type { StepName, StepStatus, PipelineState } from '../../types/pipeline';
 import { STEP_ORDER } from '../../types/pipeline';
 import { StepButton } from '../../components/StepButton';
 
+// Must match STUCK_MS in backend/src/db/queries/pipeline.ts
+const STUCK_MS = 3 * 60 * 1000; // 3 minutes
+
 interface ProjectDetailProps {
   projectId: string;
   onGoBack: () => void;
@@ -140,10 +143,45 @@ export default function ProjectDetail({ projectId, onGoBack }: ProjectDetailProp
     return getStepStatus(prevStep) !== 'done';
   };
 
+  /**
+   * Returns true when the step is 'running' but step_started_at is older than
+   * STUCK_MS — matching the backend's stuck-step detection in pipeline.ts.
+   */
+  const isStepStuck = (step: StepName): boolean => {
+    if (!pipeline || getStepStatus(step) !== 'running') return false;
+    const startedAt = pipeline.step_started_at;
+    if (!startedAt) return false;
+    return Date.now() - new Date(startedAt).getTime() > STUCK_MS;
+  };
+
   const renderStepContent = (step: StepName) => {
     const status = getStepStatus(step);
+    const stuck = isStepStuck(step);
 
     if (status === 'running') {
+      if (stuck) {
+        return (
+          <div className="p-8 border border-ochre/30 bg-ochre/5 rounded-lg flex flex-col items-start gap-4">
+            <div>
+              <h4 className="font-serif text-lg font-medium text-ochre">Step Seems Stuck</h4>
+              <p className="font-sans text-xs text-ink/60 mt-1">
+                This step has been running for over 3 minutes. The server may have crashed mid-call.
+                The step is still marked as <span className="font-semibold">running</span> — clicking Retry will
+                reset it so you can try again.
+              </p>
+            </div>
+            <button
+              onClick={() => handleRetryStep(step)}
+              disabled={isMutating}
+              className="bg-ochre hover:bg-ochre/90 text-white font-sans text-xs font-bold px-4 py-2 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {isMutating ? (
+                <><div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" /> Resetting...</>
+              ) : '↺ Force Retry Stuck Step'}
+            </button>
+          </div>
+        );
+      }
       return (
         <div className="flex flex-col items-center justify-center p-16 border border-ink/10 rounded-lg bg-sage/10 text-center">
           <div className="w-8 h-8 border-2 border-ochre border-t-transparent rounded-full animate-spin mb-4" />

@@ -4,6 +4,7 @@ import express from "express";
 import cors from "cors";
 import path from "node:path";
 import { runMigrations } from "./src/db/index.ts";
+import { recoverStuckSteps } from "./src/db/queries/pipeline.ts";
 import { authRouter } from "./src/routes/auth.ts";
 import { projectsRouter } from "./src/routes/projects.ts";
 import { stepsRouter } from "./src/routes/steps.ts";
@@ -11,8 +12,9 @@ import { stepsRouter } from "./src/routes/steps.ts";
 const app = express();
 const PORT = Number(process.env.PORT ?? 3001);
 
-// ── DB migrations ─────────────────────────────────────────────────────────────
+// ── DB migrations + startup recovery ────────────────────────────────────────
 runMigrations();
+recoverStuckSteps(); // reset any 'running' steps left over from a server crash
 
 // ── Middleware ────────────────────────────────────────────────────────────────
 app.use(cors({ origin: "http://localhost:5173" }));

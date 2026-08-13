@@ -50,8 +50,8 @@ export async function runPortraitStep(
     model: MODELS.image,
     ...(prevInteractionId ? { previous_interaction_id: prevInteractionId } : {}),
     input: prompt,
-    config: { responseModalities: ["IMAGE", "TEXT"] },
-  });
+    response_modalities: ["image"],
+  } as any);
 
   const { base64, mimeType } = extractImage(response);
   return { interactionId: response.id!, imageBase64: base64, mimeType };
@@ -78,8 +78,8 @@ export async function runIllustrationStep(
     model: MODELS.image,
     ...(prevInteractionId ? { previous_interaction_id: prevInteractionId } : {}),
     input: prompt,
-    config: { responseModalities: ["IMAGE", "TEXT"] },
-  });
+    response_modalities: ["image"],
+  } as any);
 
   const { base64, mimeType } = extractImage(response);
   return { interactionId: response.id!, imageBase64: base64, mimeType };

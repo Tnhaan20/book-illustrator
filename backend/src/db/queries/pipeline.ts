@@ -17,6 +17,42 @@ export function initPipelineState(projectId: string): void {
   );
 }
 
+/**
+ * Called once at server startup.
+ *
+ * If the server was killed mid-Gemini-call (SIGKILL, crash, OOM, etc.) any
+ * step that was 'running' at the time of death is left frozen in the DB with
+ * no live process behind it. We reset every such step to 'failed' immediately
+ * on restart so users see the Retry button right away instead of waiting for
+ * the frontend's 3-minute stuck detector.
+ *
+ * Safe to call unconditionally: if the server starts cleanly (no crash), there
+ * are no 'running' steps, and the UPDATE changes 0 rows.
+ */
+export function recoverStuckSteps(): void {
+  const STEP_FIELDS = [
+    "step_style",
+    "step_characters",
+    "step_portraits",
+    "step_chapters",
+    "step_illustrations",
+  ] as const;
+
+  let totalReset = 0;
+  for (const field of STEP_FIELDS) {
+    const result = db.run(
+      `UPDATE pipeline_state SET ${field} = 'failed' WHERE ${field} = 'running'`
+    );
+    totalReset += result.changes;
+  }
+
+  if (totalReset > 0) {
+    console.log(
+      `[db] startup recovery: reset ${totalReset} stuck-running step(s) to 'failed'`
+    );
+  }
+}
+
 export function getPipelineState(projectId: string): PipelineStateRow | null {
   return db
     .query<PipelineStateRow, [string]>(
@@ -99,8 +135,8 @@ export function claimStepForRetry(projectId: string, field: StepField): boolean 
     }
 
     db.run(
-      `UPDATE pipeline_state SET ${field} = 'running', step_started_at = ? WHERE project_id = ?`,
-      [new Date().toISOString(), projectId]
+      `UPDATE pipeline_state SET ${field} = 'pending', step_started_at = NULL WHERE project_id = ?`,
+      [projectId]
     );
     claimed = true;
   })();

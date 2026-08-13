@@ -12,5 +12,5 @@ export const ai = new GoogleGenAI({ apiKey });
 /** Model IDs — update here only, never hard-code elsewhere. */
 export const MODELS = {
   text: "gemini-3.5-flash",
-  image: "gemini-3.1-flash-image", // requires paid tier
+  image: "gemini-3-pro-image-preview",
 } as const;

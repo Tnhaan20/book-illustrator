@@ -183,6 +183,8 @@ router.post("/portraits", async (req, res) => {
     const characters = listCharactersByProject(project.id);
     let lastInteractionId: string | null = state.image_interaction_id;
     let anyFailed = false;
+    let lastErrorStatus = 500;
+    let lastErrorMessage = "Some character portraits failed to generate";
 
     for (const character of characters) {
       if (character.status === "done") {
@@ -204,17 +206,19 @@ router.post("/portraits", async (req, res) => {
         );
         updateCharacterPortrait(character.id, imgPath);
         lastInteractionId = interactionId;
-      } catch (err) {
+      } catch (err: any) {
         console.error(`[step:portraits] Failed for character ${character.name}`, err);
         markCharacterFailed(character.id);
         anyFailed = true;
+        lastErrorStatus = err?.rawResponse?.status || err?.status || err?.response?.status || 500;
+        lastErrorMessage = err?.error?.message || err?.message || "Failed to generate portrait";
       }
     }
 
     if (anyFailed) {
       markStepFailed(project.id, "step_portraits");
-      res.status(500).json({
-        error: "Some character portraits failed to generate",
+      res.status(lastErrorStatus === 429 ? 429 : 500).json({
+        error: lastErrorStatus === 429 ? "Quota exceeded (429). Please check your billing." : lastErrorMessage,
         characters: listCharactersByProject(project.id),
         pipeline_state: getPipelineState(project.id),
       });
@@ -315,6 +319,8 @@ router.post("/illustrations", async (req, res) => {
     const chapters = listChaptersByProject(project.id);
     let lastInteractionId: string | null = state.image_interaction_id;
     let anyFailed = false;
+    let lastErrorStatus = 500;
+    let lastErrorMessage = "Some chapter illustrations failed to generate";
 
     for (const chapter of chapters) {
       if (chapter.status === "done") {
@@ -336,17 +342,19 @@ router.post("/illustrations", async (req, res) => {
         );
         updateChapterIllustration(chapter.id, imgPath);
         lastInteractionId = interactionId;
-      } catch (err) {
+      } catch (err: any) {
         console.error(`[step:illustrations] Failed for chapter ${chapter.name}`, err);
         markChapterFailed(chapter.id);
         anyFailed = true;
+        lastErrorStatus = err?.rawResponse?.status || err?.status || err?.response?.status || 500;
+        lastErrorMessage = err?.error?.message || err?.message || "Failed to generate illustration";
       }
     }
 
     if (anyFailed) {
       markStepFailed(project.id, "step_illustrations");
-      res.status(500).json({
-        error: "Some chapter illustrations failed to generate",
+      res.status(lastErrorStatus === 429 ? 429 : 500).json({
+        error: lastErrorStatus === 429 ? "Quota exceeded (429). Please check your billing." : lastErrorMessage,
         chapters: listChaptersByProject(project.id),
         pipeline_state: getPipelineState(project.id),
       });
